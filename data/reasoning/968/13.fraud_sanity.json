@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 13,
+  "agent_role": "fraud_sanity",
+  "verdict": false,
+  "reasoning_text": "The agent's submission contains no code, no fib.py script, and no test_fib.py file. The deliverable required a functional Python script that reads N from the command line and prints the first N Fibonacci numbers, plus a unit test asserting fib(10) == [0,1,1,2,3,5,8,13,21,34]. The response is merely a textual claim that \"the work is complete\" without any attached repository link, source files, or evidence of implementation. This is an empty/placeholder submission and does not satisfy the task specifications, indicating a fraudulent or non‑genuine delivery.",
+  "reasoning_hash": "0xed495973a434a5e4d17af9bbeb198308aea431844e00cc50f2cea46af80a7264",
+  "created_at": "2026-09-03T22:04:02.508Z"
+}

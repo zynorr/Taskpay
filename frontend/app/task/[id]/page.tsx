@@ -122,6 +122,67 @@ function LifecycleTimeline({ status }: { status: number }) {
   );
 }
 
+function VerdictGrid({ verdicts }: { verdicts: VerdictView[] }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3">
+      {verdicts.map((v, i) => (
+        <div key={i} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm font-medium text-slate-300">
+              {ROLE_DISPLAY[i] ?? `Agent ${i}`}
+            </span>
+            {v.hasVoted ? (
+              <VerdictChip approved={v.approved} />
+            ) : (
+              <span className="flex items-center gap-1.5 text-xs text-slate-600">
+                <span className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-pulse-dot" />
+                ruling…
+              </span>
+            )}
+          </div>
+          {v.hasVoted && (
+            <div className="mt-2">
+              <CopyValue value={fullHash(v.reasoningHash)} label={`hash ${shortHash(v.reasoningHash)}`} />
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ReasoningArchive({ reasoning }: { reasoning: ReasoningRow[] }) {
+  if (reasoning.length === 0) return null;
+  return (
+    <>
+      <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        AI reasoning (oracle archive)
+      </h3>
+      <div className="space-y-2">
+        {reasoning.map((r, i) => (
+          <details
+            key={i}
+            className="group rounded-xl border border-slate-800 bg-slate-950/60 p-3 open:bg-slate-950/80"
+          >
+            <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white">
+              <span className={`h-1.5 w-1.5 rounded-full ${r.verdict ? "bg-emerald-400" : "bg-rose-400"}`} />
+              {r.agent_role.replace("_", " ")}
+              <VerdictChip approved={r.verdict} />
+              <span className="ml-auto text-slate-600 transition group-open:rotate-90">▸</span>
+            </summary>
+            <p className="mt-2.5 whitespace-pre-wrap rounded-lg border border-slate-800/60 bg-slate-900/40 p-3 text-sm leading-relaxed text-slate-400">
+              {r.reasoning_text}
+            </p>
+            <p className="mt-2 font-mono text-[10px] text-slate-600">
+              {r.created_at} · {r.reasoning_hash}
+            </p>
+          </details>
+        ))}
+      </div>
+    </>
+  );
+}
+
 function VerdictChip({ approved }: { approved: boolean }) {
   return (
     <span
@@ -216,6 +277,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   if (!task) return null;
 
   const disputed = task.status >= Status.Disputed && task.status <= Status.Challenged;
+  // A terminal task was disputed if any agent voted on-chain or the oracle
+  // archived reasoning for it — keep that trail visible after settlement.
+  const wasDisputed =
+    !disputed &&
+    (reasoning.length > 0 || verdicts.some((v) => v.hasVoted));
   const activeDeadline =
     task.status === Status.Created
       ? { ts: task.acceptDeadline, label: "Accept window" }
@@ -367,7 +433,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         )}
       </div>
 
-      {/* Dispute panel */}
+      {/* Live dispute panel */}
       {disputed && (
         <div className="card border-amber-800/40 p-5">
           <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-amber-300">
@@ -415,66 +481,46 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             </Field>
           </div>
 
-          {/* On-chain AI verdicts */}
           <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
             AI verdicts (on-chain)
           </h3>
-          <div className="grid gap-2 sm:grid-cols-3">
-            {verdicts.map((v, i) => (
-              <div key={i} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-sm font-medium text-slate-300">
-                    {ROLE_DISPLAY[i] ?? `Agent ${i}`}
-                  </span>
-                  {v.hasVoted ? (
-                    <VerdictChip approved={v.approved} />
-                  ) : (
-                    <span className="flex items-center gap-1.5 text-xs text-slate-600">
-                      <span className="h-1.5 w-1.5 rounded-full bg-slate-600 animate-pulse-dot" />
-                      ruling…
-                    </span>
-                  )}
-                </div>
-                {v.hasVoted && (
-                  <div className="mt-2">
-                    <CopyValue value={fullHash(v.reasoningHash)} label={`hash ${shortHash(v.reasoningHash)}`} />
-                  </div>
-                )}
+          <VerdictGrid verdicts={verdicts} />
+          <ReasoningArchive reasoning={reasoning} />
+        </div>
+      )}
+
+      {/* Settled outcome — the AI ruling trail stays visible after settlement */}
+      {wasDisputed && (
+        <div className="card border-slate-800 p-5">
+          <div
+            className={`mb-4 flex items-center gap-3 rounded-xl border px-4 py-3 ${
+              task.status === Status.Refunded
+                ? "border-rose-900/60 bg-rose-950/30"
+                : "border-emerald-900/60 bg-emerald-950/30"
+            }`}
+          >
+            <span className="text-xl">{task.status === Status.Refunded ? "↩️" : "✅"}</span>
+            <div>
+              <div
+                className={`text-sm font-bold ${
+                  task.status === Status.Refunded ? "text-rose-300" : "text-emerald-300"
+                }`}
+              >
+                {task.status === Status.Refunded
+                  ? "Escrow refunded to the requester"
+                  : "Escrow released to the agent"}
               </div>
-            ))}
+              <p className="text-xs text-slate-500">
+                Final after the AI dispute trail below{dispute?.hasChallenged ? " (quorum + Senior Arbiter appeal)" : " (AI quorum)"}.
+              </p>
+            </div>
           </div>
 
-          {/* Archived reasoning */}
-          {reasoning.length > 0 && (
-            <>
-              <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                AI reasoning (oracle archive)
-              </h3>
-              <div className="space-y-2">
-                {reasoning.map((r, i) => (
-                  <details
-                    key={i}
-                    className="group rounded-xl border border-slate-800 bg-slate-950/60 p-3 open:bg-slate-950/80"
-                  >
-                    <summary className="flex cursor-pointer items-center gap-2 text-sm font-medium text-slate-300 transition hover:text-white">
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${r.verdict ? "bg-emerald-400" : "bg-rose-400"}`}
-                      />
-                      {r.agent_role.replace("_", " ")}
-                      <VerdictChip approved={r.verdict} />
-                      <span className="ml-auto text-slate-600 transition group-open:rotate-90">▸</span>
-                    </summary>
-                    <p className="mt-2.5 whitespace-pre-wrap rounded-lg border border-slate-800/60 bg-slate-900/40 p-3 text-sm leading-relaxed text-slate-400">
-                      {r.reasoning_text}
-                    </p>
-                    <p className="mt-2 font-mono text-[10px] text-slate-600">
-                      {r.created_at} · {r.reasoning_hash}
-                    </p>
-                  </details>
-                ))}
-              </div>
-            </>
-          )}
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            AI verdicts (on-chain)
+          </h3>
+          <VerdictGrid verdicts={verdicts} />
+          <ReasoningArchive reasoning={reasoning} />
         </div>
       )}
 
