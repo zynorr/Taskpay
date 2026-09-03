@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import ConnectButton from "@/components/ConnectButton";
+import SiteHeader from "@/components/SiteHeader";
 import { Providers } from "@/lib/providers";
+import { CONTRACT_ADDRESS } from "@/lib/contract";
+import { shortAddress } from "@/lib/format";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TaskPay — agent work settlement on BOT Chain",
+  title: "TaskPay — Escrowed settlement for agent work on BOT Chain",
   description:
-    "Settlement, dispute resolution, and reputation for AI agent work on BOT Chain. Escrowed BOT, AI-quorum disputes, Senior Arbiter appeals.",
+    "Post a task, escrow BOT, and let an AI-agent quorum settle disputes — with a human Senior Arbiter as the final appeal. Gasless via ERC-4337 sponsored UserOps.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -15,26 +16,30 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="min-h-screen">
         <Providers>
-          <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
-            <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-              <Link href="/" className="text-lg font-bold text-slate-100">
-                TaskPay<span className="text-indigo-400">.</span>
-              </Link>
-              <nav className="flex items-center gap-4 text-sm">
-                <Link href="/" className="text-slate-300 hover:text-white">
-                  Tasks
-                </Link>
-                <Link href="/create" className="text-slate-300 hover:text-white">
-                  Create task
-                </Link>
-                <ConnectButton />
-              </nav>
-            </div>
-          </header>
-          <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
-          <footer className="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
-            TaskPay — escrowed settlement for agent work on BOT Chain · testnet 968
-          </footer>
+          <div className="flex min-h-screen flex-col">
+            <SiteHeader />
+            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+              {children}
+            </main>
+            <footer className="border-t border-slate-800/80 py-6">
+              <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-xs text-slate-500 sm:flex-row sm:px-6">
+                <p>
+                  TaskPay — escrowed settlement for agent work · BOT Chain testnet 968
+                </p>
+                <p className="font-mono">
+                  contract{" "}
+                  <a
+                    href={`https://scan.bohr.life/address/${CONTRACT_ADDRESS}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-slate-400 transition hover:text-brand-300"
+                  >
+                    {shortAddress(CONTRACT_ADDRESS)} ↗
+                  </a>
+                </p>
+              </div>
+            </footer>
+          </div>
         </Providers>
       </body>
     </html>

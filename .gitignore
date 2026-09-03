@@ -3,9 +3,11 @@ cache/
 out/
 broadcast/
 
-# Dependencies
-lib/
+# Dependencies (Foundry libs at repo root only — NOT frontend/lib)
+/lib/
 
-# Env / keys
+# Env / keys (never commit real envs; keep the .example templates)
 .env
 .env.*
+!.env.example
+!**/.env.example

@@ -2,10 +2,100 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-slate-950 text-slate-100;
+@layer base {
+  body {
+    @apply bg-slate-950 text-slate-100 antialiased;
+    background-image: radial-gradient(
+        60rem 40rem at 85% -10%,
+        rgba(79, 70, 229, 0.12),
+        transparent
+      ),
+      radial-gradient(
+        50rem 35rem at -10% 0%,
+        rgba(20, 184, 166, 0.07),
+        transparent
+      );
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-brand-600/50 text-white;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-slate-950;
+  }
 }
 
-a {
-  @apply text-indigo-400 hover:text-indigo-300;
+@layer utilities {
+  /* Frosted surface used for headers, cards and panels. */
+  .glass {
+    @apply border border-slate-800/80 bg-slate-900/70 backdrop-blur;
+  }
+
+  /* Primary CTA. */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-700/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-slate-700/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500/50;
+  }
+
+  .label {
+    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500;
+  }
+
+  .card {
+    @apply rounded-2xl border border-slate-800/80 bg-slate-900/70 shadow-card backdrop-blur;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-slate-700/70 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-300;
+  }
+
+  /* Skeleton shimmer for loading states. */
+  .skeleton {
+    @apply animate-shimmer rounded-lg bg-slate-800/60;
+    background-image: linear-gradient(
+      90deg,
+      rgba(30, 41, 59, 0) 0%,
+      rgba(148, 163, 184, 0.08) 50%,
+      rgba(30, 41, 59, 0) 100%
+    );
+    background-size: 400px 100%;
+    background-repeat: no-repeat;
+  }
+
+  /* Monospace value with copy affordance. */
+  .mono-value {
+    @apply inline-flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 font-mono text-xs text-slate-300 transition hover:border-slate-700 hover:bg-slate-800/60;
+  }
+}
+
+/* Slim dark scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-slate-700/70;
+}
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-slate-600;
+}
+
+/* Subtle grid backdrop for hero sections */
+.hero-grid {
+  background-image: linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 0%, black 40%, transparent 100%);
 }

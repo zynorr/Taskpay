@@ -1,22 +1,55 @@
-import { STATUS_LABELS } from "@/lib/contract";
+"use client";
 
-const COLORS: Record<number, string> = {
-  0: "bg-slate-700 text-slate-200",
-  1: "bg-blue-900 text-blue-200",
-  2: "bg-cyan-900 text-cyan-200",
-  3: "bg-amber-900 text-amber-200",
-  4: "bg-orange-900 text-orange-200",
-  5: "bg-purple-900 text-purple-200",
-  6: "bg-emerald-900 text-emerald-200",
-  7: "bg-rose-900 text-rose-200",
-  8: "bg-slate-800 text-slate-400",
+import { STATUS_LABELS, Status } from "@/lib/contract";
+
+const STYLES: Record<number, { dot: string; pill: string }> = {
+  [Status.Created]: {
+    dot: "bg-sky-400",
+    pill: "border-sky-800/50 bg-sky-950/40 text-sky-300",
+  },
+  [Status.Accepted]: {
+    dot: "bg-blue-400",
+    pill: "border-blue-800/50 bg-blue-950/40 text-blue-300",
+  },
+  [Status.Submitted]: {
+    dot: "bg-cyan-400",
+    pill: "border-cyan-800/50 bg-cyan-950/40 text-cyan-300",
+  },
+  [Status.Disputed]: {
+    dot: "bg-amber-400",
+    pill: "border-amber-800/50 bg-amber-950/40 text-amber-300",
+  },
+  [Status.PendingChallenge]: {
+    dot: "bg-orange-400",
+    pill: "border-orange-800/50 bg-orange-950/40 text-orange-300",
+  },
+  [Status.Challenged]: {
+    dot: "bg-violet-400",
+    pill: "border-violet-800/50 bg-violet-950/40 text-violet-300",
+  },
+  [Status.Released]: {
+    dot: "bg-emerald-400",
+    pill: "border-emerald-800/50 bg-emerald-950/40 text-emerald-300",
+  },
+  [Status.Refunded]: {
+    dot: "bg-rose-400",
+    pill: "border-rose-800/50 bg-rose-950/40 text-rose-300",
+  },
+  [Status.Cancelled]: {
+    dot: "bg-slate-500",
+    pill: "border-slate-700 bg-slate-800/60 text-slate-400",
+  },
 };
 
-export default function StatusBadge({ status }: { status: number }) {
+export default function StatusBadge({ status, pulse }: { status: number; pulse?: boolean }) {
+  const s = STYLES[status] ?? STYLES[Status.Cancelled];
   return (
     <span
-      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${COLORS[status] ?? "bg-slate-700 text-slate-200"}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${s.pill}`}
     >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${s.dot} ${pulse ? "animate-pulse-dot" : ""}`}
+      />
       {STATUS_LABELS[status] ?? `Status ${status}`}
     </span>
   );

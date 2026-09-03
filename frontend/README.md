@@ -16,19 +16,27 @@ Production: `npm run build && npm start`.
 
 ## Pages
 
-- `/` — task marketplace: every task with live status and deadline state
-- `/create` — fund a task: agent address, spec text (keccak anchored on-chain),
-  escrow amount, accept/work/review windows
-- `/task/[id]` — full lifecycle view: spec, deliverable, dispute panel with the
-  2-of-3 AI verdicts, archived reasoning (expandable), and role-aware actions
+- `/` — marketplace with hero, live stats (tasks / escrow volume / disputes /
+  settled), status filter tabs (all / active / disputed / settled / mine),
+  auto-refresh every 8s, and connection-aware "your requester/agent" chips
+- `/create` — fund a task with friendly duration presets, quick escrow chips,
+  inline validation, a live preview, and automatic spec registration
+- `/task/[id]` — lifecycle timeline, status-relevant deadlines with urgency
+  coloring, on-chain AI verdicts (Reviewer / Fraud-Sanity / Senior Arbiter),
+  expandable archived reasoning, agent rating summary, and role-aware actions
   (accept / submit / release / dispute / resolve / challenge / rate)
+
+All addresses, hashes, and transaction confirmations link out to BOT Scan
+(`scan.bohr.life`) with one-click copy.
 
 ## API routes
 
 - `/api/reasoning/[taskId]` — the oracle's archived AI reasoning rows for a task
-- `/api/specs/[taskId]` — the registered spec text for a task
+- `/api/specs/[taskId]` — GET the registered spec text for a task; POST registers
+  it (the create flow calls POST automatically, so the detail page and the
+  dispute agents can read what was asked)
 
-Both read `taskpay/data/` (the oracle's file archive; `TASKPAY_DATA_DIR`
+Both read/write `taskpay/data/` (the oracle's file archive; `TASKPAY_DATA_DIR`
 overrides the path, `NEXT_PUBLIC_CHAIN_ID` the chain subdir).
 
 ## Configuration
