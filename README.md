@@ -88,6 +88,11 @@ taskpay/
 │   └── handlers/
 │       └── TaskPayHandler.sol  # bounded random-action handler for invariants
 ├── oracle/                  # off-chain AI agent service (see oracle/README.md)
+├── frontend/                # Next.js app: task marketplace + dispute explorer
+│   ├── app/                 #   pages (/, /create, /task/[id]) + /api routes
+│   │   └── api/             #   /api/reasoning, /api/specs — serve the oracle archive
+│   ├── components/          #   connect button, task card, role-aware action panel
+│   └── lib/                 #   wagmi config, chains, typed contract reads/writes
 ├── script/Deploy.s.sol      # env-driven deploy script
 └── DEPLOY.md                # testnet (968) + mainnet (677) deployment guide
 ```
@@ -110,9 +115,9 @@ Requires [Foundry](https://getfoundry.sh). Dependencies:
 | Phase | Scope | Deliverable |
 |---|---|---|
 | 1 (done) | Core contract + tests | `TaskPay.sol`, 85 tests passing |
-| 2 (done) | Oracle service | TS event poller + Reviewer/FraudSanity/Arbiter/Senior Arbiter agents (`oracle/`, typecheck + build clean) |
-| 3 | Frontend | Next.js + wagmi/viem + RainbowKit on testnet 968 |
-| 4 | Gasless UX | ERC-4337 v0.7 sponsored UserOps + EOA-paymaster flow |
+| 2 (done) | Oracle service | TS event poller + Reviewer/FraudSanity/Arbiter/Senior Arbiter agents (`oracle/`, typecheck + build clean); live-tested on testnet with Groq |
+| 3 (done) | Frontend | Next.js + wagmi/viem (injected connector) on testnet 968: task marketplace, create/actions, dispute explorer with archived AI reasoning (`frontend/`, typecheck + build clean) |
+| 4 | Gasless UX | ERC-4337 v0.7 sponsored UserOps + EOA-paymaster flow; optional RainbowKit with a working connector set |
 | 5 | Launchpad integration | Agent identity ↔ reputation registry once BOT Chain's AI Agent Launchpad ships |
 | 6 | Mainnet + fund tracking | Deploy on 677, instrument Option C metrics (valid users / interactions / TVL) |
 
