@@ -5,6 +5,7 @@ import { ContractEventPoller } from "./contract/events.js";
 import { handleDisputeRaised } from "./pipeline/handleDispute.js";
 import { handleChallengeRaised } from "./pipeline/handleChallenge.js";
 import { runAutoActionsScan } from "./pipeline/autoActions.js";
+import { handleBundlerRequest } from "./bundler/routes.js";
 
 logger.info("oracle_starting", {
   contractAddress: env.CONTRACT_ADDRESS,
@@ -13,15 +14,28 @@ logger.info("oracle_starting", {
   dataDir: env.DATA_DIR,
 });
 
-// Health check only (Render's free tier requires binding PORT and answering
-// HTTP) — runs alongside the polling loop, not instead of it.
+// Health + ERC-4337 sponsor bundler surface. Render's free tier requires
+// binding PORT and answering HTTP; the /v1/quote and /v1/send routes let the
+// frontend run gasless TaskPay actions through the oracle's bundler. Both run
+// alongside the polling loop, not instead of it.
 const port = Number(process.env.PORT) || 3000;
-const healthServer = createServer((_req, res) => {
+const healthServer = createServer((req, res) => {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  if (url.pathname.startsWith("/v1/")) {
+    void handleBundlerRequest(req, res);
+    return;
+  }
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ status: "taskpay oracle running" }));
 });
 healthServer.listen(port, () => {
   logger.info("health_server_listening", { port });
+  logger.info("bundler_mounted", {
+    configured: Boolean(env.AA_FACTORY && env.PAYMASTER),
+    entryPoint: env.ENTRY_POINT,
+    factory: env.AA_FACTORY,
+    paymaster: env.PAYMASTER,
+  });
 });
 
 const poller = new ContractEventPoller();

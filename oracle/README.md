@@ -15,6 +15,7 @@ when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
 | `DisputeRaised(taskId)` event | Runs **Reviewer** + **FraudSanity** agents on the deliverable (in parallel); if they disagree, runs **Arbiter** to break the tie; submits each verdict on-chain; once 2-of-3 consensus exists, calls `resolveDispute` |
 | `ChallengeRaised(taskId)` event | Runs the **Senior Arbiter** agent on the full dispute trail (spec, prior verdicts + reasoning, tentative outcome, challenge) and submits the **binding** verdict |
 | Periodic scan (all tasks by ID) | Auto-calls permissionless expiry transitions: `finalizeAfterReview` (requester silent → agent paid), `finalizeAfterChallenge`, `resolveAfterSeniorArbiterTimeout`. Logs stalled disputes that need the requester's `refundAfterStalledDispute` |
+| `POST /v1/quote` + `POST /v1/send` (same HTTP server) | **Sponsor bundler** (ERC-4337 v0.7): the oracle builds a sponsored UserOp for a user's SimpleAccount (`quote`), then simulates and broadcasts `handleOps` (`send`). The paymaster deposit in the EntryPoint covers gas, so users pay nothing |
 
 ## Operating principles
 
@@ -43,7 +44,7 @@ when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
 ```
 oracle/
 ├── src/
-│   ├── index.ts                # entry: poller + scan timer + health server
+│   ├── index.ts                # entry: poller + scan timer + HTTP (health + bundler)
 │   ├── config/env.ts           # validated env (fails loud at boot)
 │   ├── contract/
 │   │   ├── TaskPay.abi.json    # hand-maintained ABI (matches TaskPay.sol)
@@ -57,6 +58,10 @@ oracle/
 │   │   ├── fraudSanity.ts      # gaming/fake-submission filter
 │   │   ├── arbiter.ts          # tie-break (only on Reviewer/Fraud split)
 │   │   └── seniorArbiter.ts    # binding appeal authority
+│   ├── bundler/                # ERC-4337 sponsor bundler (Phase 4)
+│   │   ├── userop.ts           # buildQuote/sendUserOp against the live EntryPoint
+│   │   ├── routes.ts           # /v1/quote + /v1/send HTTP handlers
+│   │   └── abi/                # EntryPoint/Factory/Paymaster/SimpleAccount ABIs
 │   ├── github/fetch.ts         # repo-at-pinned-commit fetcher (size-capped, cached)
 │   ├── pipeline/
 │   │   ├── context.ts          # task → DeliverableContext (repo or plain text)
@@ -90,6 +95,26 @@ The AI agents run on **Groq** (OpenAI-compatible) — set `GROQ_API_KEY` in
 taskpay/.env (default model `openai/gpt-oss-120b`, override with `GROQ_MODEL`).
 Env validation fails loud at boot (see `config/env.ts`).
 
+### Sponsor bundler (gasless actions)
+
+The oracle doubles as TaskPay's ERC-4337 v0.7 bundler + paymaster signer. Set
+in taskpay/.env (all optional — omit to run dispute-only):
+
+```bash
+ENTRY_POINT=0x0000000071727De22E5E9d8BAf0edAc6f37da032   # canonical v0.7 (live on BOT)
+AA_FACTORY=0x...                                         # SimpleAccountFactory (see DeployAA.s.sol)
+PAYMASTER=0x...                                          # VerifyingPaymaster; signer = oracle key
+PORT=8787                                                # serves /v1/quote + /v1/send + health
+```
+
+The frontend points `NEXT_PUBLIC_BUNDLER_URL` at this port. Flow: frontend
+builds a TaskPay call → `/v1/quote` returns a UserOp (paymaster-signed,
+gas-filled) + the hash for the user's EOA to sign → the user signs (one wallet
+popup, zero gas) → `/v1/send` simulates with `eth_call` and broadcasts
+`handleOps` from the oracle EOA; the EntryPoint settles gas from the paymaster
+deposit. See the README's Phase 4 section and `scripts/live_gasless.mjs` for a
+full worked lifecycle.
+
 ## Deliverable evidence model
 
 TaskPay's `submission` field is free-form. The oracle treats a submission as
@@ -109,3 +134,12 @@ the agents verbatim as text evidence.
 - **The Senior Arbiter challenge reason arrives as an on-chain hash.** TaskPay
   does not store free text on-chain; full challenge text is expected to be
   archived by the frontend before a challenge is escalated.
+- **The bundler sponsors every UserOp it can simulate.** `eth_call` on
+  `handleOps` is the gate: invalid signatures, unfunded escrow, or calls to
+  other contracts revert in simulation and are never broadcast. The paymaster
+  deposit is the only real cost ceiling — top it up via
+  `paymaster.deposit{value: …}()` when low.
+- **BOT Chain has base fee 0 and a fixed gas price**, so UserOps use legacy
+  fee mode (equal max/priority fees) and `handleOps` is broadcast as a type-0
+  tx. EntryPoint bytecode on 968 is byte-identical to mainnet's canonical
+  v0.7 deployment (verified by code comparison).

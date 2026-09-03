@@ -29,6 +29,12 @@ export interface OracleEnv {
   GITHUB_TOKEN?: string;
   MAX_REPO_BYTES?: number;
   DATA_DIR: string;
+  // ERC-4337 sponsor stack (the oracle doubles as the bundler + paymaster signer).
+  // Optional: when absent the bundler endpoints respond 503 and the oracle only
+  // runs the dispute pipeline.
+  ENTRY_POINT?: string;
+  AA_FACTORY?: string;
+  PAYMASTER?: string;
 }
 
 function isValidUrl(value: string): boolean {
@@ -114,6 +120,9 @@ function validate(): OracleEnv {
     GITHUB_TOKEN: raw.GITHUB_TOKEN || undefined,
     MAX_REPO_BYTES: raw.ORACLE_MAX_REPO_BYTES ? Number(raw.ORACLE_MAX_REPO_BYTES) : undefined,
     DATA_DIR: raw.TASKPAY_DATA_DIR || path.resolve(__dirname, "../../../data"),
+    ENTRY_POINT: raw.ENTRY_POINT || undefined,
+    AA_FACTORY: raw.AA_FACTORY || undefined,
+    PAYMASTER: raw.PAYMASTER || undefined,
   };
 }
 

@@ -117,9 +117,40 @@ Requires [Foundry](https://getfoundry.sh). Dependencies:
 | 1 (done) | Core contract + tests | `TaskPay.sol`, 85 tests passing |
 | 2 (done) | Oracle service | TS event poller + Reviewer/FraudSanity/Arbiter/Senior Arbiter agents (`oracle/`, typecheck + build clean); live-tested on testnet with Groq |
 | 3 (done) | Frontend | Next.js + wagmi/viem (injected connector) on testnet 968: task marketplace, create/actions, dispute explorer with archived AI reasoning (`frontend/`, typecheck + build clean) |
-| 4 | Gasless UX | ERC-4337 v0.7 sponsored UserOps + EOA-paymaster flow; optional RainbowKit with a working connector set |
+| 4 (done) | Gasless UX | ERC-4337 v0.7 sponsored UserOps: canonical EntryPoint verified live on BOT Chain, own `SimpleAccountFactory` + `VerifyingPaymaster` deployed, oracle doubles as the sponsor bundler (`/v1/quote` + `/v1/send`); users act through their SimpleAccount and pay 0 gas. Live-tested end-to-end (create → accept → submit → release) |
 | 5 | Launchpad integration | Agent identity ↔ reputation registry once BOT Chain's AI Agent Launchpad ships |
 | 6 | Mainnet + fund tracking | Deploy on 677, instrument Option C metrics (valid users / interactions / TVL) |
+
+## ERC-4337 sponsor stack (Phase 4)
+
+BOT Chain has no production 4337 infrastructure (bundler RPC / paymaster), but the
+canonical **EntryPoint v0.7** is deployed at `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
+— verified byte-identical to the mainnet deployment. TaskPay runs its own minimal
+sponsor stack on top of it:
+
+| Contract | Address (testnet 968) | Notes |
+|---|---|---|
+| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | canonical, pre-deployed |
+| SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` | counterfactual accounts (owner EOA + salt 0) |
+| VerifyingPaymaster | `0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0` | sponsors gas; signer = oracle key; deposit funded in EntryPoint |
+
+Contracts are vendored from `@account-abstraction/contracts@0.7.0` under `src/aa/`
+(see `script/DeployAA.s.sol`). Those files keep their upstream GPL-3.0 SPDX
+headers; the rest of the repo (TaskPay.sol, oracle, frontend) is MIT. The **oracle service is the bundler**: it exposes
+`POST /v1/quote` (builds the UserOp, attaches the paymaster signature, returns the
+hash to sign) and `POST /v1/send` (simulates with `eth_call`, then broadcasts
+`handleOps` from the oracle EOA; gas settles from the paymaster deposit). The
+frontend signs the UserOp hash with the user's EOA and the whole action executes
+gasless. Roles on-chain become the user's **smart account** (each connected EOA's
+`SimpleAccount`), so identity and gasless UX are the same mechanism.
+
+Verify locally (requires a funded `.env`):
+
+```bash
+cd oracle && npm run build && cd ..
+node scripts/live_gasless.mjs        # module-level: create→accept→submit→release, all sponsored
+node scripts/gasless_http_e2e.mjs    # HTTP-level, exactly what the frontend does
+```
 
 ## License
 

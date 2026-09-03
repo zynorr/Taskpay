@@ -56,6 +56,41 @@ verification is done via the explorer UI).
 > reached by RPC URL only. Pass the chain id explicitly in every call; do not
 > rely on auto-detection.
 
+## ERC-4337 sponsor stack (Phase 4)
+
+TaskPay runs its own account-abstraction stack on testnet so users never pay
+gas. The canonical **EntryPoint v0.7** is already live at
+`0x0000000071727De22E5E9d8BAf0edAc6f37da032` (bytecode verified identical to
+mainnet). Only the factory + paymaster need deploying:
+
+```bash
+# ENTRY_POINT (optional), VERIFYING_SIGNER defaults to the deployer. Set it to
+# the oracle address: the oracle signs paymaster approvals AND broadcasts
+# handleOps (it is the bundler).
+VERIFYING_SIGNER=$ORACLE_ADDRESS forge script script/DeployAA.s.sol \
+  --rpc-url $RPC_URL --private-key $PRIVATE_KEY --broadcast
+```
+
+Then fund the paymaster's gas deposit inside the EntryPoint:
+
+```bash
+cast send --rpc-url $RPC_URL --private-key $PRIVATE_KEY \
+  <PAYMASTER_ADDRESS> "deposit()" --value 1ether
+# verify: cast call <ENTRY_POINT> "balanceOf(address)(uint256)" <PAYMASTER_ADDRESS>
+```
+
+Current testnet deployments (968):
+
+| Contract | Address |
+|---|---|
+| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
+| SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` |
+| VerifyingPaymaster | `0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0` |
+
+Point `ENTRY_POINT` / `AA_FACTORY` / `PAYMASTER` in taskpay/.env at these and
+run the oracle on `PORT=8787` — it serves the bundler endpoints the frontend
+calls. See the repo README's Phase 4 section and `scripts/live_gasless.mjs`.
+
 ## Post-deploy checklist
 
 1. Confirm `owner()` and `oracle()` on the explorer.
