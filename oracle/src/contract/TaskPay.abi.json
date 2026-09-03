@@ -1,0 +1,149 @@
+[
+  {
+    "type": "event",
+    "name": "TaskSubmitted",
+    "inputs": [
+      { "name": "taskId", "type": "uint256", "indexed": true },
+      { "name": "agent", "type": "address", "indexed": true },
+      { "name": "submission", "type": "string", "indexed": false },
+      { "name": "reviewDeadline", "type": "uint256", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "DisputeRaised",
+    "inputs": [
+      { "name": "taskId", "type": "uint256", "indexed": true },
+      { "name": "requester", "type": "address", "indexed": true },
+      { "name": "reason", "type": "string", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "ChallengeRaised",
+    "inputs": [
+      { "name": "taskId", "type": "uint256", "indexed": true },
+      { "name": "challenger", "type": "address", "indexed": true },
+      { "name": "reasoningHash", "type": "bytes32", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "VerdictSubmitted",
+    "inputs": [
+      { "name": "taskId", "type": "uint256", "indexed": true },
+      { "name": "role", "type": "uint8", "indexed": true },
+      { "name": "approved", "type": "bool", "indexed": false },
+      { "name": "reasoningHash", "type": "bytes32", "indexed": false }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "taskCount",
+    "stateMutability": "view",
+    "inputs": [],
+    "outputs": [{ "name": "", "type": "uint256" }]
+  },
+  {
+    "type": "function",
+    "name": "getTask",
+    "stateMutability": "view",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          { "name": "requester", "type": "address" },
+          { "name": "agent", "type": "address" },
+          { "name": "amount", "type": "uint256" },
+          { "name": "specHash", "type": "bytes32" },
+          { "name": "submission", "type": "string" },
+          { "name": "status", "type": "uint8" },
+          { "name": "createdAt", "type": "uint256" },
+          { "name": "acceptDeadline", "type": "uint256" },
+          { "name": "workDeadline", "type": "uint256" },
+          { "name": "reviewDeadline", "type": "uint256" }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "verdicts",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "taskId", "type": "uint256" },
+      { "name": "role", "type": "uint256" }
+    ],
+    "outputs": [
+      { "name": "hasVoted", "type": "bool" },
+      { "name": "approved", "type": "bool" },
+      { "name": "reasoningHash", "type": "bytes32" }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "disputes",
+    "stateMutability": "view",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": [
+      { "name": "tentativeApproved", "type": "bool" },
+      { "name": "challengeDeadline", "type": "uint256" },
+      { "name": "hasChallenged", "type": "bool" },
+      { "name": "seniorArbiterDeadline", "type": "uint256" },
+      { "name": "challengeReasoningHash", "type": "bytes32" }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "submitVerdict",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "taskId", "type": "uint256" },
+      { "name": "role", "type": "uint8" },
+      { "name": "approved", "type": "bool" },
+      { "name": "reasoningHash", "type": "bytes32" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "resolveDispute",
+    "stateMutability": "nonpayable",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "submitSeniorArbiterVerdict",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "taskId", "type": "uint256" },
+      { "name": "approved", "type": "bool" },
+      { "name": "reasoningHash", "type": "bytes32" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "finalizeAfterReview",
+    "stateMutability": "nonpayable",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "finalizeAfterChallenge",
+    "stateMutability": "nonpayable",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "resolveAfterSeniorArbiterTimeout",
+    "stateMutability": "nonpayable",
+    "inputs": [{ "name": "taskId", "type": "uint256" }],
+    "outputs": []
+  }
+]

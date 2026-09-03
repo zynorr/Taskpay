@@ -1,0 +1,11 @@
+# Foundry
+cache/
+out/
+broadcast/
+
+# Dependencies
+lib/
+
+# Env / keys
+.env
+.env.*

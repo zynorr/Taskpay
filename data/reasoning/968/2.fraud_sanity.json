@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 2,
+  "agent_role": "fraud_sanity",
+  "verdict": false,
+  "reasoning_text": "The agent’s deliverable consists solely of a GitHub URL pointing to a specific commit hash, but no actual content of the one‑page markdown specification or release checklist is provided in the submission. As the reviewer I cannot see any markdown text, headings, or checklist items, nor any evidence that the repository contains the required document. Submitting only a link without presenting the deliverable amounts to a placeholder or potentially fabricated answer that cannot be verified, which fails an obvious sanity check. Therefore the submission is rejected as a non‑genuine, incomplete delivery.",
+  "reasoning_hash": "0x103a7ef0c6bd3f2d137c9322d0bea4d8b61d6dd71e17f859f7c842ece9ff13e2",
+  "created_at": "2026-09-03T18:41:28.884Z"
+}

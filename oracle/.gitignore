@@ -1,0 +1,11 @@
+# Dependencies
+node_modules/
+
+# Compiled output
+dist/
+
+# Local env / keys
+.env
+
+# Off-chain archives (reasoning text, spec text) — generated at runtime
+data/

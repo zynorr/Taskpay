@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 1,
+  "agent_role": "reviewer",
+  "verdict": false,
+  "reasoning_text": "The requester asked for a one-page markdown specification for a task escrow product that also includes a release checklist. The only evidence provided by the agent is a GitHub link (https://github.com/taskpay/spec-doc@0123456789abcdef0123456789abcdef01234567) with no displayed content. Without the actual markdown text or a summary, the reviewer cannot verify that the document is one page, written in markdown, covers the escrow product, and contains a release checklist. The deliverable therefore does not demonstrably satisfy the functional requirements of the task. Consequently, the submission should be rejected and the requester refunded.",
+  "reasoning_hash": "0x1ededa572574ecf09f7b52e49a62115a38d8b77c7b6868b75edfe23bde401264",
+  "created_at": "2026-09-03T18:39:25.523Z"
+}

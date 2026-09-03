@@ -1,0 +1,27 @@
+{
+  "name": "taskpay-oracle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Polling oracle worker for TaskPay: listens for disputes, runs the Reviewer/FraudSanity/Arbiter/Senior Arbiter agent roles, and submits verdicts on-chain; also auto-triggers deadline-based transitions.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.4",
+    "groq-sdk": "^1.6.0",
+    "octokit": "^4.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

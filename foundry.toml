@@ -1,0 +1,21 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+test = "test"
+solc_version = "0.8.24"
+evm_version = "paris"
+optimizer = true
+optimizer_runs = 200
+# The Task struct's public getter returns enough fields that solc's legacy
+# codegen hits "stack too deep" (same fix the Swarm Escrow reference uses).
+via_ir = true
+
+# Silence Solc warnings that are informational only.
+[profile.default.fmt]
+line_length = 120
+
+# Keep the build reproducible.
+[profile.ci]
+fuzz = { runs = 256 }
+invariant = { runs = 128, depth = 1024 }
