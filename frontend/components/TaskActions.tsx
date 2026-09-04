@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { writeContract, writeGasless, myIdentity } from "@/lib/tasks";
+import { writeGasless, myIdentity } from "@/lib/tasks";
 import { bundlerUrl } from "@/lib/aa";
 import { Status } from "@/lib/contract";
 import { shortAddress, explorerTx, looksLikeUrl } from "@/lib/format";
@@ -15,14 +15,12 @@ function ActionButton({
   busy,
   disabled,
   tone = "default",
-  gasless,
 }: {
   label: string;
   onClick: () => void;
   busy?: boolean;
   disabled?: boolean;
   tone?: "default" | "danger" | "success";
-  gasless?: boolean;
 }) {
   const toneCls =
     tone === "danger"
@@ -40,7 +38,7 @@ function ActionButton({
         <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
       )}
       {busy ? "Confirming…" : label}
-      {gasless && !busy && (
+      {!busy && (
         <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
           ⚡ gasless
         </span>
@@ -70,7 +68,6 @@ export default function TaskActions({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [smart, setSmart] = useState<string | null>(null);
-  const [gaslessOn, setGaslessOn] = useState(false);
 
   // Form inputs for multi-field actions
   const [submitText, setSubmitText] = useState("");
@@ -81,13 +78,14 @@ export default function TaskActions({
   // Last confirmed action → explorer link
   const [confirmed, setConfirmed] = useState<{ label: string; hash: string } | null>(null);
 
+  const bundlerOnline = Boolean(bundlerUrl());
+
   useEffect(() => {
     let alive = true;
     if (!isConnected || !address) {
       setSmart(null);
       return;
     }
-    setGaslessOn(Boolean(bundlerUrl()));
     myIdentity()
       .then(({ smart: s }) => alive && setSmart(s))
       .catch(() => alive && setSmart(null));
@@ -109,19 +107,21 @@ export default function TaskActions({
   const requester = task.requester.toLowerCase();
   const agent = task.agent.toLowerCase();
 
-  const requesterRole = requester === me ? ("eoa" as const) : requester === meSmart ? ("smart" as const) : null;
-  const agentRole = agent === me ? ("eoa" as const) : agent === meSmart ? ("smart" as const) : null;
-  const isRequester = requesterRole !== null;
-  const isAgent = agentRole !== null && !isRequester;
+  // Gasless-only: an action is only possible when the on-chain role IS the
+  // connected wallet's TaskPay account (sponsored UserOps run as that account).
+  const isRequester = requester === meSmart;
+  const isAgent = agent === meSmart;
 
-  function act(name: string, fnName: Parameters<typeof writeContract>[0], args: unknown[], opts?: { value?: bigint }) {
+  // Legacy tasks may name the raw wallet instead of its TaskPay account —
+  // those roles can no longer be acted on from the gasless-only app.
+  const legacyBlocked =
+    meSmart !== null && !isRequester && !isAgent && (requester === me || agent === me);
+
+  function act(name: string, fnName: Parameters<typeof writeGasless>[0], args: unknown[], opts?: { value?: bigint }) {
     setBusy(name);
     setError(null);
     setConfirmed(null);
-    const actor =
-      name === "accept" || name === "submit" ? agentRole : name === "challenge" ? challengeRole() : requesterRole;
-    const viaGasless = actor === "smart" && gaslessOn;
-    (viaGasless ? writeGasless(fnName, args, opts) : writeContract(fnName, args, opts))
+    writeGasless(fnName, args, opts)
       .then((res) => {
         setConfirmed({ label: name, hash: res.hash });
         onSettled();
@@ -130,25 +130,30 @@ export default function TaskActions({
       .finally(() => setBusy(null));
   }
 
-  function challengeRole(): "eoa" | "smart" | null {
+  function losingParty(): "requester" | "agent" | null {
     if (!dispute) return null;
-    return dispute.tentativeApproved ? requesterRole : agentRole;
+    return dispute.tentativeApproved ? "requester" : "agent";
   }
+  const challenger = losingParty();
+  const canChallenge = challenger !== null && (challenger === "requester" ? isRequester : isAgent);
 
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const gaslessAvailable = gaslessOn && smart !== null;
-
-  const inputCls =
-    "input !py-1.5 text-xs";
+  const inputCls = "input !py-1.5 text-xs";
 
   return (
     <div className="space-y-3">
-      {gaslessAvailable && (
-        <p className="text-xs text-emerald-400/80">
-          ⚡ Gasless is on — actions you own via your smart account (
-          <span className="font-mono">{smart ? shortAddress(smart) : ""}</span>) are sponsored by the
-          TaskPay oracle. You only sign, never pay gas.
-        </p>
+      {!bundlerOnline && (
+        <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-300">
+          The sponsor bundler is offline — actions are unavailable until the oracle is running.
+        </div>
+      )}
+      {legacyBlocked && (
+        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-500">
+          This task was created with your wallet address directly as the{" "}
+          {requester === me ? "requester" : "agent"}, not your TaskPay account. TaskPay is
+          gasless-only now, so this legacy task can&apos;t be acted on from the app — new tasks bind
+          the TaskPay account and work fully gasless.
+        </div>
       )}
       {error && (
         <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-300">
@@ -170,19 +175,25 @@ export default function TaskActions({
         </div>
       )}
 
+      {!bundlerOnline && (
+        <p className="text-[11px] text-slate-600">
+          Connected as <span className="font-mono">{shortAddress(smart ?? address)}</span> — no
+          wallet transaction is ever broadcast; actions are sponsored UserOps.
+        </p>
+      )}
+
       {/* Created: designated agent accepts */}
-      {task.status === Status.Created && isAgent && (
+      {task.status === Status.Created && isAgent && bundlerOnline && (
         <ActionButton
           tone="success"
           label="Accept task"
           busy={busy === "accept"}
-          gasless={agentRole === "smart" && gaslessOn}
           onClick={() => act("accept", "acceptTask", [task.taskId])}
         />
       )}
 
       {/* Accepted: agent submits deliverable */}
-      {task.status === Status.Accepted && isAgent && (
+      {task.status === Status.Accepted && isAgent && bundlerOnline && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
           <label className="block text-xs font-medium text-slate-400">
             Deliverable <span className="text-slate-600">(repo URL, commit SHA, or text)</span>
@@ -203,24 +214,20 @@ export default function TaskActions({
             label="Submit deliverable"
             busy={busy === "submit"}
             disabled={!submitText.trim()}
-            gasless={agentRole === "smart" && gaslessOn}
             onClick={() => act("submit", "submitWork", [task.taskId, submitText.trim()])}
           />
         </div>
       )}
 
       {/* Submitted: requester releases or disputes */}
-      {task.status === Status.Submitted && isRequester && (
+      {task.status === Status.Submitted && isRequester && bundlerOnline && (
         <div className="space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <ActionButton
-              tone="success"
-              label="Release payment"
-              busy={busy === "release"}
-              gasless={requesterRole === "smart" && gaslessOn}
-              onClick={() => act("release", "release", [task.taskId])}
-            />
-          </div>
+          <ActionButton
+            tone="success"
+            label="Release payment"
+            busy={busy === "release"}
+            onClick={() => act("release", "release", [task.taskId])}
+          />
           <div className="space-y-2 rounded-xl border border-rose-900/40 bg-rose-950/20 p-3">
             <label className="block text-xs font-medium text-rose-300">
               Not satisfied? Raise a dispute <span className="font-normal text-rose-400/70">(AI quorum rules)</span>
@@ -237,7 +244,6 @@ export default function TaskActions({
               label="Raise dispute"
               busy={busy === "dispute"}
               disabled={!disputeReason.trim()}
-              gasless={requesterRole === "smart" && gaslessOn}
               onClick={() => act("dispute", "raiseDispute", [task.taskId, disputeReason.trim()])}
             />
           </div>
@@ -245,7 +251,7 @@ export default function TaskActions({
       )}
 
       {/* Disputed: anyone resolves once 2-of-3 exists */}
-      {task.status === Status.Disputed && (
+      {task.status === Status.Disputed && bundlerOnline && (
         <div>
           <ActionButton
             label="Resolve dispute (apply 2-of-3 verdict)"
@@ -253,13 +259,13 @@ export default function TaskActions({
             onClick={() => act("resolve", "resolveDispute", [task.taskId])}
           />
           <p className="mt-1.5 text-[11px] text-slate-600">
-            Once two AI agents agree, anyone can apply the ruling on-chain.
+            Once two AI agents agree, anyone can apply the ruling on-chain — sponsored, 0 gas.
           </p>
         </div>
       )}
 
       {/* PendingChallenge: losing party challenges within the window */}
-      {task.status === Status.PendingChallenge && dispute && (
+      {task.status === Status.PendingChallenge && dispute && bundlerOnline && (
         <div className="space-y-2">
           {now > dispute.challengeDeadline && (
             <ActionButton
@@ -269,7 +275,7 @@ export default function TaskActions({
               onClick={() => act("finalize", "finalizeAfterChallenge", [task.taskId])}
             />
           )}
-          {challengeRole() !== null && now <= dispute.challengeDeadline && (
+          {canChallenge && now <= dispute.challengeDeadline && (
             <div className="space-y-2 rounded-xl border border-violet-900/40 bg-violet-950/20 p-3">
               <label className="block text-xs font-medium text-violet-300">
                 You lost the quorum ruling — appeal to the Senior Arbiter
@@ -286,7 +292,6 @@ export default function TaskActions({
                 label="Challenge to Senior Arbiter"
                 busy={busy === "challenge"}
                 disabled={!challengeReason.trim()}
-                gasless={challengeRole() === "smart" && gaslessOn}
                 onClick={() =>
                   act("challenge", "challenge", [
                     task.taskId,
@@ -300,7 +305,7 @@ export default function TaskActions({
       )}
 
       {/* Released: requester rates the agent */}
-      {task.status === Status.Released && isRequester && (
+      {task.status === Status.Released && isRequester && bundlerOnline && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
           <div className="flex items-center gap-1">
             {[1, 2, 3, 4, 5].map((n) => (
@@ -321,7 +326,6 @@ export default function TaskActions({
           <ActionButton
             label={`Submit ${rating}★`}
             busy={busy === "rate"}
-            gasless={requesterRole === "smart" && gaslessOn}
             onClick={() => act("rate", "rateAgent", [task.taskId, rating])}
           />
         </div>

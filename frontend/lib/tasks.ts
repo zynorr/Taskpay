@@ -1,4 +1,4 @@
-import { getPublicClient, getAccount, writeContract as coreWriteContract, waitForTransactionReceipt, signMessage as coreSignMessage } from "@wagmi/core";
+import { getPublicClient, getAccount, signMessage as coreSignMessage } from "@wagmi/core";
 import { keccak256, toHex } from "viem";
 import { config } from "@/lib/wagmi";
 import { CONTRACT_ADDRESS, TASKPAY_ABI } from "@/lib/contract";
@@ -188,23 +188,3 @@ export async function writeGasless(
   return { hash: sent.txHash as `0x${string}`, status: "success" };
 }
 
-// Generic write helper: uses the connected account, returns the receipt status.
-export async function writeContract(
-  functionName: WriteName,
-  args: readonly unknown[],
-  opts: { value?: bigint } = {},
-): Promise<TxResult> {
-  const account = getAccount(config);
-  if (!account.isConnected || !account.address) {
-    throw new Error("Wallet not connected");
-  }
-  const hash = (await coreWriteContract(config, {
-    address: CONTRACT_ADDRESS,
-    abi,
-    functionName,
-    args: args as never,
-    ...(opts.value !== undefined ? { value: opts.value } : {}),
-  } as never)) as `0x${string}`;
-  const receipt = await waitForTransactionReceipt(config, { hash });
-  return { hash, status: receipt.status };
-}

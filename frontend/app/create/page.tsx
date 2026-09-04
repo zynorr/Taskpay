@@ -3,17 +3,17 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseEther, formatEther } from "viem";
-import { useAccount, useSendTransaction, useWaitForTransactionReceipt } from "wagmi";
-import {
-  writeContract,
-  writeGasless,
-  specHashOf,
-  myIdentity,
-  fetchTaskCount,
-} from "@/lib/tasks";
+import { useAccount } from "wagmi";
+import { writeGasless, specHashOf, myIdentity, fetchTaskCount } from "@/lib/tasks";
 import { smartAccountOf, bundlerUrl } from "@/lib/aa";
-import { shortAddress, shortHash, explorerTx } from "@/lib/format";
-import { formatDurationLabel } from "@/lib/format";
+import {
+  shortAddress,
+  shortHash,
+  explorerTx,
+  explorerAddress,
+  copyText,
+  formatDurationLabel,
+} from "@/lib/format";
 
 const ACCEPT_OPTIONS = [600, 3600, 21600, 86400];
 const WORK_OPTIONS = [3600, 21600, 86400, 259200, 604800];
@@ -55,14 +55,14 @@ export default function CreateTaskPage() {
   const [acceptWindow, setAcceptWindow] = useState("3600");
   const [workDuration, setWorkDuration] = useState("86400");
   const [reviewPeriod, setReviewPeriod] = useState("259200");
-  const [gasless, setGasless] = useState(false);
   const [smart, setSmart] = useState<string | null>(null);
   const [smartBalance, setSmartBalance] = useState<bigint | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [created, setCreated] = useState<{ taskId: number; hash: string; gasless: boolean } | null>(null);
+  const [created, setCreated] = useState<{ taskId: number; hash: string } | null>(null);
 
-  const canGasless = Boolean(bundlerUrl()) && isConnected;
+  const bundlerOnline = Boolean(bundlerUrl());
 
   const agentValid = /^0x[0-9a-fA-F]{40}$/.test(agent);
   const amountWei = useMemo(() => {
@@ -74,7 +74,22 @@ export default function CreateTaskPage() {
   }, [amount]);
   const amountValid = amountWei > 0n;
 
-  // Load the connected EOA's smart account (its on-chain TaskPay identity).
+  const fetchBalance = useCallback(async (smartAddr: string) => {
+    try {
+      const [{ getPublicClient }, { config }] = await Promise.all([
+        import("@wagmi/core"),
+        import("@/lib/wagmi"),
+      ]);
+      const bal = (await getPublicClient(config).getBalance({
+        address: smartAddr as `0x${string}`,
+      })) as bigint;
+      setSmartBalance(bal);
+    } catch {
+      /* keep the last known balance */
+    }
+  }, []);
+
+  // Load the connected EOA's TaskPay account (its smart account) + balance.
   useEffect(() => {
     let alive = true;
     if (!isConnected || !address) {
@@ -82,50 +97,35 @@ export default function CreateTaskPage() {
       setSmartBalance(null);
       return;
     }
-    if (canGasless) setGasless(true);
     myIdentity()
-      .then(({ smart: s }) => {
+      .then(async ({ smart: s }) => {
         if (!alive) return;
         setSmart(s);
-        return s;
-      })
-      .then((s) => {
-        if (!alive || !s) return;
-        import("@wagmi/core").then(async ({ getPublicClient }) => {
-          const { config } = await import("@/lib/wagmi");
-          const bal = (await getPublicClient(config).getBalance({ address: s as `0x${string}` })) as bigint;
-          if (alive) setSmartBalance(bal);
-        });
+        if (s) await fetchBalance(s);
       })
       .catch(() => alive && setSmart(null));
     return () => {
       alive = false;
     };
-  }, [isConnected, address, canGasless]);
+  }, [isConnected, address, fetchBalance]);
 
-  // One-time top-up: EOA → smart account so the sponsored createTask has escrow.
-  const { sendTransactionAsync } = useSendTransaction();
-  const [fundTx, setFundTx] = useState<`0x${string}` | null>(null);
-  const { data: fundReceipt } = useWaitForTransactionReceipt({ hash: fundTx ?? undefined });
+  // While the account is short of escrow, watch for the external deposit
+  // (the app never signs a funding transaction — it arrives from the wallet).
   useEffect(() => {
-    if (fundReceipt?.status === "success" && smart) {
-      import("@wagmi/core").then(async ({ getPublicClient }) => {
-        const { config } = await import("@/lib/wagmi");
-        const bal = (await getPublicClient(config).getBalance({ address: smart as `0x${string}` })) as bigint;
-        setSmartBalance(bal);
-        setFundTx(null);
-      });
-    }
-  }, [fundReceipt, smart]);
+    if (!smart || smartBalance === null || smartBalance >= amountWei) return;
+    const t = setInterval(() => fetchBalance(smart), 4000);
+    return () => clearInterval(t);
+  }, [smart, smartBalance, amountWei, fetchBalance]);
 
-  async function topUp(amountWei: bigint) {
+  const underfunded = smart !== null && smartBalance !== null && smartBalance < amountWei;
+  const missing = smartBalance === null ? null : amountWei - smartBalance;
+
+  async function onCopy() {
     if (!smart) return;
-    setError(null);
-    try {
-      const value = amountWei + parseEther("0.005");
-      setFundTx(await sendTransactionAsync({ to: smart as `0x${string}`, value }));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+    const ok = await copyText(smart);
+    if (ok) {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
     }
   }
 
@@ -146,6 +146,14 @@ export default function CreateTaskPage() {
       setError("Escrow amount must be greater than 0.");
       return;
     }
+    if (smartBalance === null || smartBalance < amountWei) {
+      setError(
+        `Your TaskPay account holds ${
+          smartBalance === null ? "…" : `${formatEther(smartBalance)} BOT`
+        } — fund it with at least ${amount} BOT to escrow this task.`,
+      );
+      return;
+    }
 
     const args = [
       agent.trim(),
@@ -157,23 +165,12 @@ export default function CreateTaskPage() {
 
     setBusy(true);
     try {
-      if (gasless && smart) {
-        if (smartBalance === null || smartBalance < amountWei) {
-          setError(
-            `Your TaskPay account (${shortAddress(smart)}) holds ${
-              smartBalance === null ? "…" : `${formatEther(smartBalance)} BOT`
-            } — fund it once, then every action is gasless.`,
-          );
-          return;
-        }
-        const res = await writeGasless("createTask", args, { value: amountWei });
-        const count = await fetchTaskCount();
-        setCreated({ taskId: count - 1, hash: res.hash, gasless: true });
-      } else {
-        const res = await writeContract("createTask", args, { value: amountWei });
-        const count = await fetchTaskCount();
-        setCreated({ taskId: count - 1, hash: res.hash, gasless: false });
-      }
+      // Gasless-only: the TaskPay account performs the create through the
+      // oracle's sponsored bundler. The user signs one UserOp hash — no wallet
+      // transaction is ever broadcast from this app.
+      const res = await writeGasless("createTask", args, { value: amountWei });
+      const count = await fetchTaskCount();
+      setCreated({ taskId: count - 1, hash: res.hash });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -200,9 +197,16 @@ export default function CreateTaskPage() {
         <h1 className="text-2xl font-bold tracking-tight text-white">Post a task</h1>
         <p className="mt-1 text-sm text-slate-400">
           Fund an escrow, name an agent, and let settlement run itself — disputes ruled by the AI
-          quorum, appeals by a Senior Arbiter.
+          quorum, appeals by a Senior Arbiter. Every action is sponsored: you sign, never pay gas.
         </p>
       </div>
+
+      {!bundlerOnline && (
+        <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
+          The sponsor bundler isn&apos;t reachable, and TaskPay is gasless-only — posting tasks is
+          unavailable until the oracle is running.
+        </div>
+      )}
 
       {!isConnected && (
         <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-4 text-sm text-amber-300">
@@ -210,219 +214,270 @@ export default function CreateTaskPage() {
         </div>
       )}
 
-      {canGasless && (
+      {isConnected && bundlerOnline && (
         <div className="rounded-2xl border border-emerald-900/50 bg-emerald-950/20 p-4">
-          <label className="flex cursor-pointer items-center gap-2.5 text-sm text-emerald-200">
-            <input
-              type="checkbox"
-              checked={gasless}
-              onChange={(e) => setGasless(e.target.checked)}
-              className="h-4 w-4 rounded accent-emerald-500"
-            />
-            <span>
-              <strong>Gasless (sponsored)</strong> — the TaskPay oracle pays gas via ERC-4337
+          <p className="flex flex-wrap items-center gap-2 text-sm text-emerald-200">
+            <span className="font-semibold">Your TaskPay account</span>
+            <span className="font-mono">{smart ? shortAddress(smart) : "…"}</span>
+            {smart && (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={onCopy}
+                  className="rounded border border-emerald-800/60 px-1.5 py-0.5 text-[10px] text-emerald-300 transition hover:bg-emerald-900/40"
+                >
+                  {copied ? "✓ copied" : "copy"}
+                </button>
+                <a
+                  href={explorerAddress(smart)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded border border-emerald-800/60 px-1.5 py-0.5 text-[10px] text-emerald-300 transition hover:bg-emerald-900/40"
+                >
+                  view ↗
+                </a>
+              </span>
+            )}
+            <span className="chip border-emerald-800/50 bg-emerald-950/40 text-emerald-300">
+              balance {smartBalance === null ? "…" : `${formatEther(smartBalance)} BOT`}
             </span>
-          </label>
-          {gasless && smart && (
-            <div className="mt-3 space-y-2 text-xs text-emerald-300/80">
-              <p className="flex flex-wrap items-center gap-2">
-                Your on-chain identity is your smart account:
-                <span className="font-mono">{shortAddress(smart)}</span>
-                <span className="chip border-emerald-800/50 bg-emerald-950/40 text-emerald-300">
-                  balance {smartBalance === null ? "…" : `${formatEther(smartBalance)} BOT`}
-                </span>
-                {smartBalance !== null && smartBalance < amountWei && (
-                  <button
-                    type="button"
-                    disabled={!!fundTx}
-                    onClick={() => topUp(amountWei)}
-                    className="rounded-md bg-emerald-700 px-2.5 py-1 font-medium text-white transition hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {fundTx ? "Funding…" : "Fund account"}
-                  </button>
-                )}
+          </p>
+
+          {smartBalance !== null && underfunded ? (
+            <div className="mt-3 space-y-2 rounded-xl border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">
+              <p className="font-medium text-amber-100">
+                Fund your TaskPay account to escrow this task
               </p>
-              <p className="text-emerald-500/70">
-                Fund once with one normal transaction — every TaskPay action after (create, accept,
-                submit, release, dispute) costs you 0 gas.
+              <p className="text-amber-300/80">
+                TaskPay never broadcasts transactions from your wallet — escrow is spent from your
+                TaskPay account. Send at least{" "}
+                <span className="font-mono font-semibold text-amber-100">
+                  {formatEther(missing ?? 0n)} BOT
+                </span>{" "}
+                from your wallet on <strong>BOT Chain testnet (968)</strong> to:
+              </p>
+              <p className="flex flex-wrap items-center gap-2">
+                <span className="rounded-md border border-amber-800/70 bg-black/30 px-2.5 py-1.5 font-mono text-amber-100">
+                  {smart}
+                </span>
+                <button
+                  onClick={onCopy}
+                  className="rounded-md bg-amber-700/80 px-2.5 py-1.5 font-medium text-amber-50 transition hover:bg-amber-600 disabled:opacity-50"
+                >
+                  {copied ? "✓ Copied" : "Copy address"}
+                </button>
+                <a
+                  href={explorerAddress(smart)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-md border border-amber-800/60 px-2.5 py-1.5 text-amber-300 transition hover:bg-amber-900/40"
+                >
+                  view on explorer ↗
+                </a>
+              </p>
+              <p className="text-amber-400/70">
+                Switch your wallet to BOT Chain testnet first (button in the header if needed).
+                Balance refreshes automatically when the deposit lands.
               </p>
             </div>
+          ) : (
+            smartBalance !== null &&
+            smartBalance >= amountWei && (
+              <p className="mt-2 text-xs text-emerald-400/80">
+                ✓ Funded — escrow will come from this account. Your one-time top-up was done
+                outside the app; every TaskPay action here is sponsored.
+              </p>
+            )
           )}
         </div>
       )}
 
-      <form onSubmit={onSubmit} className="card space-y-5 p-6">
-        {/* Agent */}
-        <div>
-          <label className="label">Agent address</label>
-          <input
-            className={`input font-mono ${agent && !agentValid ? "!border-rose-800 focus:!border-rose-500 focus:!ring-rose-500/50" : ""}`}
-            placeholder="0x… (the wallet or smart account that will do the work)"
-            value={agent}
-            onChange={(e) => setAgent(e.target.value)}
-          />
-          {agent && !agentValid && (
-            <p className="mt-1.5 text-xs text-rose-400">That doesn&apos;t look like a valid address (0x + 40 hex chars).</p>
-          )}
-          {gasless && agentValid && (
-            <AgentSmartHint agent={agent.trim() as `0x${string}`} />
-          )}
-        </div>
-
-        {/* Spec */}
-        <div>
-          <label className="label">
-            Task spec <span className="normal-case text-slate-600">(anchored on-chain as a hash)</span>
-          </label>
-          <textarea
-            className="input"
-            rows={4}
-            placeholder="Describe the deliverable, requirements, and acceptance criteria…"
-            value={specText}
-            onChange={(e) => setSpecText(e.target.value)}
-          />
-          {specText.trim() && (
-            <p className="mt-1.5 font-mono text-[11px] text-slate-600">
-              specHash <span className="text-slate-500">{shortHash(specHashOf(specText.trim()))}</span>
+      {isConnected && bundlerOnline && (
+        <form onSubmit={onSubmit} className="card space-y-5 p-6">
+          {/* Agent */}
+          <div>
+            <label className="label">Agent TaskPay account</label>
+            <input
+              className={`input font-mono ${agent && !agentValid ? "!border-rose-800 focus:!border-rose-500 focus:!ring-rose-500/50" : ""}`}
+              placeholder="0x… (the agent's TaskPay account address)"
+              value={agent}
+              onChange={(e) => setAgent(e.target.value)}
+            />
+            {agent && !agentValid && (
+              <p className="mt-1.5 text-xs text-rose-400">
+                That doesn&apos;t look like a valid address (0x + 40 hex chars).
+              </p>
+            )}
+            {agentValid && (
+              <AgentSmartHint agent={agent.trim() as `0x${string}`} onUse={setAgent} />
+            )}
+            <p className="mt-1.5 text-[11px] text-slate-600">
+              The agent acts gasless from its TaskPay account — if you only know the agent&apos;s
+              wallet, paste it below and use the suggested account address.
             </p>
-          )}
-        </div>
-
-        {/* Escrow */}
-        <div>
-          <label className="label">Escrow amount</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative">
-              <input
-                className="input !w-40 font-mono"
-                inputMode="decimal"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
-                BOT
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              {AMOUNT_CHIPS.map((c) => (
-                <button
-                  key={c}
-                  type="button"
-                  onClick={() => setAmount(c)}
-                  className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition ${
-                    amount === c
-                      ? "border-brand-600 bg-brand-600/20 text-brand-200"
-                      : "border-slate-700 bg-slate-800/50 text-slate-400 hover:text-slate-200"
-                  }`}
-                >
-                  {c}
-                </button>
-              ))}
-            </div>
           </div>
-          {amount && !amountValid && (
-            <p className="mt-1.5 text-xs text-rose-400">Escrow must be greater than 0 BOT.</p>
-          )}
-        </div>
 
-        {/* Windows */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <DurationSelect
-            label="Accept window"
-            value={acceptWindow}
-            onChange={setAcceptWindow}
-            options={ACCEPT_OPTIONS}
-          />
-          <DurationSelect
-            label="Work duration"
-            value={workDuration}
-            onChange={setWorkDuration}
-            options={WORK_OPTIONS}
-          />
-          <DurationSelect
-            label="Review period"
-            value={reviewPeriod}
-            onChange={setReviewPeriod}
-            options={REVIEW_OPTIONS}
-          />
-        </div>
+          {/* Spec */}
+          <div>
+            <label className="label">
+              Task spec <span className="normal-case text-slate-600">(anchored on-chain as a hash)</span>
+            </label>
+            <textarea
+              className="input"
+              rows={4}
+              placeholder="Describe the deliverable, requirements, and acceptance criteria…"
+              value={specText}
+              onChange={(e) => setSpecText(e.target.value)}
+            />
+            {specText.trim() && (
+              <p className="mt-1.5 font-mono text-[11px] text-slate-600">
+                specHash <span className="text-slate-500">{shortHash(specHashOf(specText.trim()))}</span>
+              </p>
+            )}
+          </div>
 
-        {/* Preview */}
-        {(specText.trim() || agentValid) && (
-          <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-xs">
-            <div className="mb-2 font-semibold uppercase tracking-wide text-slate-500">
-              Preview
-            </div>
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-slate-400">
-              <span>
-                agent <span className="font-mono text-slate-300">{agentValid ? shortAddress(agent.trim()) : "…"}</span>
-              </span>
-              <span>
-                escrow{" "}
-                <span className="font-mono text-slate-300">
-                  {amountValid ? `${formatEther(amountWei)} BOT` : "…"}
+          {/* Escrow */}
+          <div>
+            <label className="label">Escrow amount</label>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <input
+                  className="input !w-40 font-mono"
+                  inputMode="decimal"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">
+                  BOT
                 </span>
-              </span>
-              <span>
-                accept in <span className="text-slate-300">{formatDurationLabel(Number(acceptWindow))}</span>
-              </span>
-              <span>
-                work for <span className="text-slate-300">{formatDurationLabel(Number(workDuration))}</span>
-              </span>
-              <span>
-                review for <span className="text-slate-300">{formatDurationLabel(Number(reviewPeriod))}</span>
-              </span>
+              </div>
+              <div className="flex gap-1.5">
+                {AMOUNT_CHIPS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    onClick={() => setAmount(c)}
+                    className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition ${
+                      amount === c
+                        ? "border-brand-600 bg-brand-600/20 text-brand-200"
+                        : "border-slate-700 bg-slate-800/50 text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
             </div>
+            {amount && !amountValid && (
+              <p className="mt-1.5 text-xs text-rose-400">Escrow must be greater than 0 BOT.</p>
+            )}
           </div>
-        )}
 
-        {error && (
-          <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-300">
-            {error}
+          {/* Windows */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <DurationSelect
+              label="Accept window"
+              value={acceptWindow}
+              onChange={setAcceptWindow}
+              options={ACCEPT_OPTIONS}
+            />
+            <DurationSelect
+              label="Work duration"
+              value={workDuration}
+              onChange={setWorkDuration}
+              options={WORK_OPTIONS}
+            />
+            <DurationSelect
+              label="Review period"
+              value={reviewPeriod}
+              onChange={setReviewPeriod}
+              options={REVIEW_OPTIONS}
+            />
           </div>
-        )}
 
-        {created && (
-          <div className="rounded-xl border border-emerald-900 bg-emerald-950/40 p-4 text-sm text-emerald-300">
-            <p className="font-semibold">
-              ✓ Task #{created.taskId} created{created.gasless && " ⚡ gasless — you paid 0 gas"}
-            </p>
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-              <button
-                onClick={() => router.push(`/task/${created.taskId}`)}
-                className="rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white transition hover:bg-emerald-600"
-              >
-                View task →
-              </button>
-              <a
-                href={explorerTx(created.hash)}
-                target="_blank"
-                rel="noreferrer"
-                className="text-emerald-200 underline-offset-2 hover:underline"
-              >
-                view transaction ↗
-              </a>
+          {/* Preview */}
+          {(specText.trim() || agentValid) && (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-4 text-xs">
+              <div className="mb-2 font-semibold uppercase tracking-wide text-slate-500">
+                Preview
+              </div>
+              <div className="flex flex-wrap gap-x-6 gap-y-2 text-slate-400">
+                <span>
+                  agent{" "}
+                  <span className="font-mono text-slate-300">
+                    {agentValid ? shortAddress(agent.trim()) : "…"}
+                  </span>
+                </span>
+                <span>
+                  escrow{" "}
+                  <span className="font-mono text-slate-300">
+                    {amountValid ? `${formatEther(amountWei)} BOT` : "…"}
+                  </span>
+                </span>
+                <span>
+                  accept in <span className="text-slate-300">{formatDurationLabel(Number(acceptWindow))}</span>
+                </span>
+                <span>
+                  work for <span className="text-slate-300">{formatDurationLabel(Number(workDuration))}</span>
+                </span>
+                <span>
+                  review for <span className="text-slate-300">{formatDurationLabel(Number(reviewPeriod))}</span>
+                </span>
+              </div>
             </div>
-          </div>
-        )}
-
-        <button
-          type="submit"
-          disabled={busy || !isConnected}
-          className="btn-primary w-full !py-3 text-sm"
-        >
-          {busy ? (
-            <>
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-              Creating task…
-            </>
-          ) : gasless && smart ? (
-            "Create task ⚡ gasless"
-          ) : (
-            "Create task"
           )}
-        </button>
-      </form>
+
+          {error && (
+            <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-300">
+              {error}
+            </div>
+          )}
+
+          {created && (
+            <div className="rounded-xl border border-emerald-900 bg-emerald-950/40 p-4 text-sm text-emerald-300">
+              <p className="font-semibold">✓ Task #{created.taskId} created ⚡ gasless — you paid 0 gas</p>
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
+                <button
+                  onClick={() => router.push(`/task/${created.taskId}`)}
+                  className="rounded-md bg-emerald-700 px-3 py-1.5 font-medium text-white transition hover:bg-emerald-600"
+                >
+                  View task →
+                </button>
+                <a
+                  href={explorerTx(created.hash)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-emerald-200 underline-offset-2 hover:underline"
+                >
+                  view transaction ↗
+                </a>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={busy || !isConnected || underfunded || smartBalance === null}
+            className="btn-primary w-full !py-3 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {busy ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Creating task…
+              </>
+            ) : underfunded ? (
+              `Fund ${formatEther(missing ?? 0n)} BOT to create`
+            ) : (
+              "Create task ⚡ gasless"
+            )}
+          </button>
+          {underfunded && (
+            <p className="text-center text-[11px] text-slate-600">
+              Creation unlocks as soon as your TaskPay account holds the escrow — no wallet
+              transaction from this app, ever.
+            </p>
+          )}
+        </form>
+      )}
 
       <p className="text-center text-[11px] text-slate-600">
         The spec text is registered with the TaskPay archive automatically so the AI reviewers can
@@ -432,25 +487,58 @@ export default function CreateTaskPage() {
   );
 }
 
-/** Shows the agent's counterfactual smart account, so the user can paste that
- *  address to make the agent side gasless too. */
-function AgentSmartHint({ agent }: { agent: `0x${string}` }) {
-  const [smart, setSmart] = useState<string | null>(null);
+/** Given an address, resolve whether it can act gasless on TaskPay: an address
+ *  can only act through a sponsored UserOp if it IS the pasted agent's smart
+ *  account (msg.sender = the account). A plain wallet (no code) is converted
+ *  to its deterministic TaskPay account; a deployed address is left as-is. */
+function AgentSmartHint({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string) => void }) {
+  const [hint, setHint] = useState<null | { smart: string; hasCode: boolean }>(null);
   const load = useCallback(async () => {
     try {
-      setSmart(await smartAccountOf(agent));
+      const [sa, { getPublicClient }, { config }] = await Promise.all([
+        smartAccountOf(agent),
+        import("@wagmi/core"),
+        import("@/lib/wagmi"),
+      ]);
+      const code = await getPublicClient(config).getCode({ address: agent });
+      setHint({ smart: sa, hasCode: (code?.length ?? 0) > 0 });
     } catch {
-      setSmart(null);
+      setHint(null);
     }
   }, [agent]);
   useEffect(() => {
     void load();
   }, [load]);
-  if (!smart) return null;
+  if (!hint) return null;
+  if (hint.smart.toLowerCase() === agent.toLowerCase()) {
+    return (
+      <p className="mt-1.5 text-[11px] text-emerald-400/80">
+        ✓ This is the agent&apos;s TaskPay account — it can act on the task gasless.
+      </p>
+    );
+  }
+  if (hint.hasCode) {
+    return (
+      <p className="mt-1.5 text-[11px] text-amber-400/80">
+        This address has on-chain code. Only the agent&apos;s TaskPay account can act with sponsored
+        gas — if this isn&apos;t it, paste the agent&apos;s wallet address instead.
+      </p>
+    );
+  }
   return (
-    <p className="mt-1.5 text-[11px] text-slate-500">
-      That agent&apos;s gasless account: <span className="font-mono text-slate-400">{smart}</span> — paste
-      this instead to let the agent also act with sponsored gas.
-    </p>
+    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-brand-900/50 bg-brand-950/20 px-3 py-2 text-[11px] text-slate-400">
+      <span>
+        This is a plain wallet (no code). It acts on TaskPay as its account{" "}
+        <span className="font-mono text-brand-200">{hint.smart}</span> — paste the account address
+        instead so the agent can accept and work with sponsored gas.
+      </span>
+      <button
+        type="button"
+        onClick={() => onUse(hint.smart)}
+        className="rounded-md bg-brand-700 px-2 py-1 font-medium text-white transition hover:bg-brand-600"
+      >
+        Use this account
+      </button>
+    </div>
   );
 }

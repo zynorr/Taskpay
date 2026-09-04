@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { useAccount, useChainId, useConnect, useDisconnect } from "wagmi";
 import { shortAddress, copyText, explorerAddress } from "@/lib/format";
 import { targetChain } from "@/lib/chains";
+import { switchToTargetChain } from "@/lib/network";
 
 export default function ConnectButton() {
   const { address, isConnected } = useAccount();
@@ -11,6 +12,7 @@ export default function ConnectButton() {
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const [copied, setCopied] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const onCopy = useCallback(async () => {
     if (!address) return;
@@ -58,6 +60,22 @@ export default function ConnectButton() {
           </a>
         </div>
 
+        {!onRightChain && (
+          <button
+            onClick={() => {
+              setSwitching(true);
+              switchToTargetChain()
+                .catch(() => {
+                  /* stays on the current chain — the guard banner offers retry */
+                })
+                .finally(() => setSwitching(false));
+            }}
+            disabled={switching}
+            className="rounded-lg border border-amber-700 bg-amber-600/10 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition hover:bg-amber-600/20 disabled:opacity-50"
+          >
+            {switching ? "Switching…" : "Switch to testnet"}
+          </button>
+        )}
         <button
           onClick={() => disconnect()}
           className="rounded-lg border border-slate-700 px-2.5 py-1.5 text-xs text-slate-400 transition hover:border-rose-800 hover:text-rose-300"

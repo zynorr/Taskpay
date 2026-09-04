@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import SiteHeader from "@/components/SiteHeader";
+import ChainGuard from "@/components/ChainGuard";
 import { Providers } from "@/lib/providers";
 import { CONTRACT_ADDRESS } from "@/lib/contract";
 import { shortAddress } from "@/lib/format";
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <Providers>
           <div className="flex min-h-screen flex-col">
             <SiteHeader />
+            <ChainGuard />
             <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
               {children}
             </main>
