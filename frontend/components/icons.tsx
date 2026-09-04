@@ -163,3 +163,25 @@ export const Moon = (p: IconProps) => (
     <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" />
   </svg>
 );
+
+export const Person = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="8" r="4" />
+    <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+  </svg>
+);
+
+export const History = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+    <path d="M3 3v5h5" />
+    <path d="M12 7v5l3.5 2" />
+  </svg>
+);
+
+export const Award = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="9" r="5.5" />
+    <path d="m8.5 13.5-1.5 7 5-2.5 5 2.5-1.5-7" />
+  </svg>
+);

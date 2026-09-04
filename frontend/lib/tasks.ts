@@ -4,7 +4,7 @@ import { config } from "@/lib/wagmi";
 import { CONTRACT_ADDRESS, TASKPAY_ABI } from "@/lib/contract";
 import { smartAccountOf, encodeTaskPayCall } from "@/lib/aa";
 import { gaslessQuote, gaslessSend } from "@/lib/gasless";
-import type { TaskView, VerdictView, DisputeView } from "@/lib/types";
+import type { TaskView, VerdictView, DisputeView, AgentRatingRow } from "@/lib/types";
 
 const abi = TASKPAY_ABI;
 
@@ -145,6 +145,89 @@ export async function fetchAgentRating(
   } catch {
     return null;
   }
+}
+
+// Cap on how many rating rows the profile page reads per agent (the contract
+// stores one row per released+rated task; a cap keeps the page bounded).
+const MAX_RATING_ROWS = 100;
+
+/** Individual rating records for an agent (oldest first, as stored). */
+export async function fetchAgentRatingRows(agent: string): Promise<AgentRatingRow[]> {
+  const client = getPublicClient(config);
+  const summary = await fetchAgentRating(agent);
+  const count = summary ? Math.min(Number(summary.count), MAX_RATING_ROWS) : 0;
+  const rows: AgentRatingRow[] = [];
+  for (let i = 0; i < count; i++) {
+    try {
+      const raw = (await client.readContract({
+        address: CONTRACT_ADDRESS,
+        abi,
+        functionName: "agentRatings",
+        args: [agent as `0x${string}`, BigInt(i)],
+      })) as {
+        rater: `0x${string}`;
+        taskId: bigint;
+        score: number; // viem decodes uint8 as number
+        ratedAt: bigint;
+      };
+      rows.push({
+        rater: raw.rater,
+        taskId: raw.taskId,
+        score: raw.score,
+        ratedAt: raw.ratedAt,
+      });
+    } catch {
+      /* row read failed — skip */
+    }
+  }
+  return rows;
+}
+
+/** Settled (released) task count — TaskPay's core completion signal. */
+export async function fetchAgentCompletedCount(agent: string): Promise<number> {
+  const client = getPublicClient(config);
+  try {
+    const raw = (await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "getAgentTaskCount",
+      args: [agent as `0x${string}`],
+    })) as bigint;
+    return Number(raw);
+  } catch {
+    return 0;
+  }
+}
+
+/** All task ids a party appears on (as requester or agent), resolved to rows. */
+export async function fetchTaskHistory(party: string): Promise<TaskView[]> {
+  const client = getPublicClient(config);
+  let ids: bigint[] = [];
+  try {
+    ids = (await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "getTasksFor",
+      args: [party as `0x${string}`],
+    })) as unknown as bigint[];
+  } catch {
+    return [];
+  }
+  const out: TaskView[] = [];
+  for (let s = 0; s < ids.length; s += READ_BATCH) {
+    const chunk = ids.slice(s, s + READ_BATCH);
+    const rows = await Promise.all(
+      chunk.map(async (id) => {
+        try {
+          return await fetchTask(id);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (const r of rows) if (r) out.push(r);
+  }
+  return out;
 }
 
 export async function fetchDispute(taskId: bigint): Promise<DisputeView | null> {

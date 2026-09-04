@@ -36,6 +36,13 @@ export interface ReasoningRow {
   created_at: string;
 }
 
+export interface AgentRatingRow {
+  rater: string;
+  taskId: bigint;
+  score: number; // 1..5
+  ratedAt: bigint;
+}
+
 export interface SpecRow {
   chain_id: number;
   task_id: number;

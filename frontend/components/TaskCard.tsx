@@ -166,16 +166,14 @@ export default function TaskCard({
           {shortAddress(task.requester)}
         </a>
         <ArrowRight size={12} className="text-faint" />
-        <a
-          href={explorerAddress(task.agent)}
-          target="_blank"
-          rel="noreferrer"
+        <Link
+          href={`/agent/${task.agent}`}
           onClick={(e) => e.stopPropagation()}
           className="font-mono text-mute transition hover:text-accent"
-          title="Agent"
+          title="Agent profile"
         >
           {shortAddress(task.agent)}
-        </a>
+        </Link>
         {stateLine && (
           <>
             <span className="hidden h-3 w-px bg-line sm:block" />

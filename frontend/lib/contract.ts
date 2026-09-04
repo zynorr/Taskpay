@@ -97,6 +97,34 @@ export const TASKPAY_ABI = [
   },
   {
     type: "function",
+    name: "agentRatings",
+    stateMutability: "view",
+    inputs: [
+      { name: "agent", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "rater", type: "address" },
+          { name: "taskId", type: "uint256" },
+          { name: "score", type: "uint8" },
+          { name: "ratedAt", type: "uint256" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "getTasksFor",
+    stateMutability: "view",
+    inputs: [{ name: "party", type: "address" }],
+    outputs: [{ name: "ids", type: "uint256[]" }],
+  },
+  {
+    type: "function",
     name: "oracle",
     stateMutability: "view",
     inputs: [],

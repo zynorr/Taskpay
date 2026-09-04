@@ -14,6 +14,7 @@ import {
   Copy,
   FileText,
   Package,
+  Person,
   Scale,
   ShieldCheck,
   Star,
@@ -65,6 +66,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="micro">{label}</div>
       <div className="mt-1 text-sm">{children}</div>
     </div>
+  );
+}
+
+function ProfileChip({ address }: { address: string }) {
+  return (
+    <Link
+      href={`/agent/${address}`}
+      className="ml-2 inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[11px] font-medium text-mute transition hover:border-accent-line hover:text-accent"
+    >
+      <Person size={11} /> Profile
+    </Link>
   );
 }
 
@@ -437,7 +449,10 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             <PartyLink address={task.requester} />
           </Field>
           <Field label="Agent">
-            <PartyLink address={task.agent} />
+            <span className="inline-flex flex-wrap items-center">
+              <PartyLink address={task.agent} />
+              <ProfileChip address={task.agent} />
+            </span>
           </Field>
           <Field label="Agent rating">
             <Rating avg={avgRating} count={rating?.count ?? 0n} />
