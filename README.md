@@ -30,7 +30,7 @@ when a dispute is actually raised.
 ## Architecture
 
 ```mermaid
-flowchart LR
+flowchart TB
   subgraph FE["Frontend (Next.js)"]
     UI["marketplace · create · task detail · reasoning archive"]
     W["wallet — signs one UserOp hash, never broadcasts"]
@@ -52,7 +52,7 @@ flowchart LR
   EP --> SA --> TP
   TP -->|DisputeRaised / ChallengeRaised events| POLL
   POLL --> AI
-  AI -->|submitVerdict (reasoning hash)| TP
+  AI -->|"submitVerdict · reasoning hash"| TP
   POLL -->|auto-finalize past deadlines| TP
   UI -->|reads on-chain state| TP
   UI -->|serves / reads| ARC
