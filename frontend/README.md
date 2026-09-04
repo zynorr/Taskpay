@@ -19,8 +19,9 @@ Production: `npm run build && npm start`.
 - `/` — marketplace with hero, live stats (tasks / escrow volume / disputes /
   settled), status filter tabs (all / active / disputed / settled / mine),
   auto-refresh every 8s, and connection-aware "your requester/agent" chips
-- `/create` — fund a task with friendly duration presets, quick escrow chips,
-  inline validation, a live preview, and automatic spec registration
+- `/create` — task name + requirements, friendly duration presets, quick
+  escrow chips, inline validation, and automatic spec registration
+  (name + hashed spec text)
 - `/task/[id]` — lifecycle timeline, status-relevant deadlines with urgency
   coloring, on-chain AI verdicts (Reviewer / Fraud-Sanity / Senior Arbiter),
   expandable archived reasoning, agent rating summary, and role-aware actions
@@ -32,9 +33,11 @@ All addresses, hashes, and transaction confirmations link out to BOT Scan
 ## API routes
 
 - `/api/reasoning/[taskId]` — the oracle's archived AI reasoning rows for a task
-- `/api/specs/[taskId]` — GET the registered spec text for a task; POST registers
-  it (the create flow calls POST automatically, so the detail page and the
-  dispute agents can read what was asked)
+- `/api/specs/[taskId]` — GET one task's registered spec (name + text); POST
+  registers it. The create flow calls POST automatically after creating a task,
+  so the marketplace, detail page, and dispute agents can read what was asked
+- `/api/specs` — batch GET of every registered spec, keyed by task id; the
+  marketplace uses this to render each card's name + summary in one request
 
 Both read/write `taskpay/data/` (the oracle's file archive; `TASKPAY_DATA_DIR`
 overrides the path, `NEXT_PUBLIC_CHAIN_ID` the chain subdir).

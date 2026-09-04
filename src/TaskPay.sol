@@ -11,8 +11,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  *
  * A requester (human or autonomous agent) locks BOT for a designated agent,
  * the agent accepts and submits a deliverable, and payment settles on-chain
- * through requester approval, a worker-friendly expiry default, or — when
- * disputed — an AI-agent quorum with a human Senior Arbiter override.
+ * through requester approval, a worker-friendly expiry default, or — when *         disputed — an AI-agent quorum with a Senior Arbiter escalation.
  *
  * Design decisions:
  *   - Judge-first, AI-on-dispute. The requester is the default judge: they
@@ -29,11 +28,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
  *   - One reputation signal per task (single rating) keeps the trail honest.
  *
  * Statuses: Created -> Accepted -> Submitted -> Released
- *            Created -> Cancelled / Refunded (missed deadline / mutual cancel)
- *            Submitted -> Disputed -> PendingChallenge -> Released | Refunded
- *            Submitted -> Released | Refunded (auto-finalize / reclaim)
- *            Refunded/Released are terminal. A dispute can be escalated to a
- *            human Senior Arbiter (Challenged) whose verdict is binding.
+ *            Created -> Cancelled / Refunded (missed deadline / mutual cancel) *         Submitted -> Disputed -> PendingChallenge -> Released | Refunded
+ *         Submitted -> Released | Refunded (auto-finalize / reclaim)
+ *         Refunded/Released are terminal. A dispute can be escalated to the
+ *         Senior Arbiter role (Challenged), run off-chain by an AI agent,
+ *         whose verdict is binding.
  */
 
 contract TaskPay is ReentrancyGuard, Ownable {
@@ -488,8 +487,8 @@ contract TaskPay is ReentrancyGuard, Ownable {
         else _refundRequester(taskId);
     }
 
-    /// @notice Losing party (per tentative outcome) escalates to the human
-    ///         Senior Arbiter within the challenge window.
+    /// @notice Losing party (per tentative outcome) escalates to the Senior
+    ///         Arbiter within the challenge window.
     function challenge(uint256 taskId, bytes32 reasoningHash) external taskExists(taskId) {
         Task storage task = tasks[taskId];
         Dispute storage dispute = disputes[taskId];

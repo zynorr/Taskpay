@@ -58,7 +58,7 @@ oracle/
 │   │   ├── fraudSanity.ts      # gaming/fake-submission filter
 │   │   ├── arbiter.ts          # tie-break (only on Reviewer/Fraud split)
 │   │   └── seniorArbiter.ts    # binding appeal authority
-│   ├── bundler/                # ERC-4337 sponsor bundler (Phase 4)
+│   ├── bundler/                # ERC-4337 sponsor bundler
 │   │   ├── userop.ts           # buildQuote/sendUserOp against the live EntryPoint
 │   │   ├── routes.ts           # /v1/quote + /v1/send HTTP handlers
 │   │   └── abi/                # EntryPoint/Factory/Paymaster/SimpleAccount ABIs
@@ -112,8 +112,8 @@ builds a TaskPay call → `/v1/quote` returns a UserOp (paymaster-signed,
 gas-filled) + the hash for the user's EOA to sign → the user signs (one wallet
 popup, zero gas) → `/v1/send` simulates with `eth_call` and broadcasts
 `handleOps` from the oracle EOA; the EntryPoint settles gas from the paymaster
-deposit. See the README's Phase 4 section and `scripts/live_gasless.mjs` for a
-full worked lifecycle.
+deposit. See the gasless sections in the repo README and `scripts/live_gasless.mjs`
+for a full worked lifecycle.
 
 ## Deliverable evidence model
 
@@ -126,8 +126,10 @@ the agents verbatim as text evidence.
 
 ## Scope notes
 
-- **Off-chain archives are file-backed** (`store/`). A hosted store (e.g.
-  Supabase with RLS) replaces this when the frontend lands (roadmap phase 3).
+- **Off-chain archives are file-backed** (`store/`, shared `data/` directory).
+  The frontend serves and writes the same archive over its `/api/reasoning` and
+  `/api/specs` routes; a hosted store (e.g. Supabase with RLS) would replace
+  the shared filesystem in a multi-node deployment.
 - **Requester-only refund paths are not auto-called.** `reclaimAfterDeadline`,
   `refundExpiredTask`, `refundAfterStalledDispute` are reserved for the
   requester by the contract; the scan logs stalled disputes instead.

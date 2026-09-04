@@ -1,157 +1,201 @@
 # TaskPay
 
-**Settlement, dispute resolution, and reputation for agent work on BOT Chain.**
+**Escrowed settlement, AI dispute resolution, and portable reputation for agent work on BOT Chain.**
 
-TaskPay lets a human or autonomous requester lock BOT for a designated agent,
-have the agent accept and submit a deliverable, and settle payment on-chain —
-through requester approval, a worker-friendly expiry default, or, when
-disputed, an AI-agent quorum with a human Senior Arbiter override. Every
-settled task leaves a portable on-chain reputation trail for the agent.
+A requester (human or autonomous agent) posts a task and locks BOT in escrow for one designated
+agent. The agent accepts, does the work, and submits evidence. Payment settles on-chain through one
+of three paths:
 
-Positioned for the BOT Chain Ecosystem Support Program (Option C — user
-growth, interactions, and TVL from a pre-token application).
+1. **Requester approval** — the requester releases within the review window.
+2. **Worker-friendly default** — requester silence past the review deadline auto-finalizes and pays
+   the agent.
+3. **AI dispute** — a contested deliverable goes to an AI quorum, with an escalation path to a
+   Senior Arbiter whose verdict is binding.
 
-## Why
+Every action is a **sponsored ERC-4337 UserOp** — users sign once and pay zero gas. Every settled
+task leaves a one-per-task on-chain reputation record that any downstream application can read.
 
-BOT Chain is shipping agent infrastructure — on-chain identity, dedicated
-agent wallets, native on-chain interaction — but has no settlement, dispute,
-or reputation layer on top of it. Agent work needs the same three things
-freelance markets standardized years ago: escrowed payment, a fair dispute
-path, and a reputation record that follows the worker. TaskPay is that layer:
-one contract holding the escrow, an optional off-chain oracle that runs AI
-agents only when a dispute is raised, and on-chain reputation that any
-downstream application can read.
+## What problem it solves
 
-## Design decisions
+BOT Chain is shipping agent infrastructure — on-chain identity, dedicated agent wallets, native
+agent interaction — but has no settlement or trust layer on top. Agent work needs what freelance
+markets standardized years ago: **escrowed payment** (the requester funds first, so a ghosting
+worker can't cost them money), **a fair dispute path** (the deliverable is judged against the spec
+by AI agents, not just the requester's word), and **a reputation trail that follows the worker**
+across jobs. TaskPay provides all three as one contract plus an off-chain oracle.
 
-| Decision | Choice | Rationale |
+The oracle stays out of the happy path: it costs nothing on normal tasks and only runs AI agents
+when a dispute is actually raised.
+
+## Architecture
+
+```
+┌────────────────────────────┐        ┌──────────────────────────────────────────────┐
+│  Frontend (Next.js)        │        │  Oracle (TypeScript)                          │
+│  ─ marketplace / create /  │        │  ─ event poller (DisputeRaised, Challenge)   │
+│    task detail / archive   │        │  ─ deadline scanner (auto-finalize)          │
+│  ─ reads contract + local  │        │  ─ AI agents (Groq):                          │
+│    /api routes             │        │      Reviewer · FraudSanity · Arbiter ·       │
+│  ─ wallet: sign only       │        │      Senior Arbiter                           │
+│    (no gas, no broadcast)  │        │  ─ ERC-4337 sponsor bundler (/v1/quote,       │
+└────────────┬───────────────┘        │      /v1/send) + paymaster signer             │
+             │ UserOps (signed)       └───────┬──────────────────────────────┬────────┘
+             │                                │ handleOps (oracle key,        │ events /
+             ▼                                │ paymaster covers gas)         │ tx (deadline)
+┌─────────────────────────────────────────────▼──────────────────────────────▼────────┐
+│  BOT Chain (testnet 968)                                                             │
+│  ┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────┐  │
+│  │ TaskPay.sol              │   │ EntryPoint v0.7          │   │ SimpleAccount    │  │
+│  │  escrow · status ·       │   │ (canonical, pre-deployed)│   │ per user         │  │
+│  │  verdicts · reputation   │   └──────────────────────────┘   │ (factory-created)│  │
+│  └──────────────────────────┘   ┌──────────────────────────┐   └──────────────────┘  │
+│  Escrowed BOT lives here.       │ VerifyingPaymaster       │                          │
+│  Only a spec hash + verdict     │  deposit pays gas        │                          │
+│  reasoning hashes are stored   └──────────────────────────┘                          │
+│  on-chain — full text lives    ┌──────────────────────────┐                          │
+│  in the file archive.          │ file archive (data/)     │                          │
+│                                │  specs/{chain}/{id}.json │                          │
+│                                │  reasoning/{chain}/{id}. │                          │
+│                                │    {role}.json           │                          │
+│                                └──────────────────────────┘                          │
+└───────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+**On-chain vs off-chain.** The contract stores only what must be tamper-proof and readable by
+anyone: escrow amounts, statuses, deadlines, the `keccak256` of the task spec, verdict hashes, and
+ratings. The spec text, the AI reasoning that produced a verdict, and human-readable task names
+live in a file archive (`data/`) and are served by the frontend API routes. Verdict reasoning is
+anchored on-chain by its hash, so an archived row can always be verified against the verdict.
+
+### Components
+
+| Component | Role | Stack |
 |---|---|---|
-| Judge | **Requester-first; AI only on dispute** | The requester approves or disputes within a review window. The AI quorum only runs when a dispute is raised, so normal tasks cost zero oracle fees |
-| Silent requester | **Auto-finalize pays the agent** after the review period | Requester silence becomes an action; the agent is never left unpaid by inaction |
-| Acceptance | Designated agent + **accept window** | Prevents accept-after-reclaim races |
-| Consensus | **2-of-3 AI quorum** (Reviewer / FraudSanity / Arbiter; Arbiter only on split) | No single model output moves funds; reasoning hashes are anchored on-chain |
-| Escalation | **Challenge window → human Senior Arbiter**, binding, with timeout fallback to the tentative outcome | Deterministic dispute path; funds can never be stranded by an unresponsive oracle |
-| Oracle | Single updatable address (later: committee/DVN) | Centralized v1 with an explicit decentralization roadmap |
-| Stuck funds | `refundAfterStalledDispute` once the review period lapses without consensus | The requester can always exit a stalled dispute |
-| Fees | Optional platform fee (default 0, max 5%) charged **only on worker payout**, accruing to a treasury | Sustainable without touching refunds |
-| Reputation | 1–5 ratings + released-task count per agent, one per task | Portable on-chain reputation is the retention moat |
+| `src/TaskPay.sol` | Settlement contract: escrow, lifecycle, dispute state machine, reputation, optional protocol fee | Solidity 0.8.24, OpenZeppelin (ReentrancyGuard, Ownable) |
+| `oracle/` | Off-chain service: watches the contract, runs AI agents on disputes, auto-calls deadline transitions, doubles as the sponsor bundler | TypeScript, ethers, Groq SDK, tsx |
+| `frontend/` | Marketplace + task detail + create flow + reasoning archive UI | Next.js App Router, wagmi/viem, Geist |
+| `script/`, `scripts/` | Forge deploy scripts + end-to-end lifecycle drivers | Solidity (forge), Node |
 
-## Contract architecture
-
-Single self-contained contract (`src/TaskPay.sol`) holding escrowed BOT —
-no external token flow.
-
-**Statuses**
+### Contract: lifecycle & statuses
 
 ```
-Created → Accepted → Submitted → Released          (requester approves)
-Created → Cancelled / Refunded                     (missed accept window, mutual cancel)
-Submitted → Released                               (finalizeAfterReview — silence pays agent)
-Submitted → Disputed → PendingChallenge → Released | Refunded
-             └─ refundAfterStalledDispute → Refunded   (no consensus before review lapse)
-PendingChallenge → Challenged → Released | Refunded    (Senior Arbiter, binding)
-PendingChallenge → Released | Refunded                 (unchallenged, after window)
-Challenged → Released | Refunded                       (arbiter timeout → tentative outcome)
+                     accept                    submit work               requester releases ──► Released (agent paid)
+Created ──────────► Accepted ────────────────► Submitted ──────────────┤
+   │                    │                          │                    └ review window lapses ──► Released (finalizeAfterReview, anyone)
+   │                    │                          └ requester disputes ─► Disputed
+   └ accept window      └ work deadline            (or refundExpiredTask   │
+      lapses →            lapses → Refunded          past work deadline)    │  Reviewer + FraudSanity
+      Reclaimed /          (requester refunds)                              │  (Arbiter on split) → 2-of-3
+      Cancelled                                                                ▼
+                                                                      PendingChallenge (tentative outcome + window)
+                                                                           │ losing party challenges
+                                                                           ▼
+                                                                     Challenged ──► Senior Arbiter verdict ──► Released | Refunded
+                                                                           └ window lapses / arbiter timeout → tentative outcome
 ```
 
-**Core functions**
+Every deadline transition is callable on-chain without the oracle — **the oracle is a
+convenience, never a gatekeeper.** Agent-payout paths (`finalizeAfterReview` and the arbiter
+timeouts) are permissionless so anyone can unblock a worker's payment; refund-to-requester paths
+are gated to the requester. If the oracle is down, funds still move — deadlines are enforced by
+the contract, not by uptime.
 
-| Group | Functions |
+### Design decisions
+
+| Decision | Choice |
 |---|---|
-| Lifecycle | `createTask(agent, specHash, acceptWindow, workDuration, reviewPeriod)` (payable), `acceptTask`, `submitWork(submission)` |
-| Settlement | `release`, `finalizeAfterReview` (anyone), `refundExpiredTask`, `reclaimAfterDeadline`, `cancelOpenTask`, `setCancellationApproval` (mutual) |
-| Dispute | `raiseDispute(reason)`, `submitVerdict(role, approved, reasoningHash)` (oracle), `resolveDispute` (2-of-3 → tentative + challenge window), `challenge` (losing party only), `finalizeAfterChallenge`, `submitSeniorArbiterVerdict` (oracle, binding), `resolveAfterSeniorArbiterTimeout`, `refundAfterStalledDispute` |
-| Reputation | `rateAgent(taskId, 1..5)`, `getAgentRatingSummary`, `getAgentTaskCount` |
-| Admin | `setOracle`, `setChallengeWindow`, `setSeniorArbiterWindow`, `setFee`, `withdrawTreasury` (all owner) |
-| Views | `getTask`, `getVerdict`, `getDispute`, `getTasksFor(address)` |
+| Judge | Requester-first; **AI agents only run when a dispute is raised**, so happy-path tasks cost zero oracle/AI fees |
+| Silent requester | **Auto-finalize pays the agent** after the review period — requester inaction can never strand a worker's payment |
+| Escalation | 2-of-3 quorum first (Reviewer + FraudSanity; Arbiter on a split); the losing party can escalate to a **binding Senior Arbiter** ruling |
+| Acceptance | Designated agent + accept window (no open bidding — the requester names their counterparty) |
+| Stuck funds | Every window has an expiry owner: requester reclaims a no-show, anyone can finalize a delivered task, `refundAfterStalledDispute` exits a stalled dispute |
+| Fees | Optional protocol fee (default 0, max 5%) charged **only on worker payout** — refunds are never taxed |
+| Reputation | One 1–5 rating + released-task count per agent, stored on-chain and readable by any app |
+| Gas | **Gasless-only UX**: every write is a sponsored UserOp; the wallet's only job is signing one hash |
 
-**Security posture:** ReentrancyGuard on every fund-moving path;
-state-before-transfer ordering; role checks on every actor boundary;
-deliverable evidence verified off-chain before AI review (server-side commit
-check); every deadline/expiry path is public and callable by anyone, so the
-oracle is never a gatekeeper; fees charged only on success; terminal-status
-transitions covered by tests including a malicious-receiver case.
-
-## Repo layout
+## Repository layout
 
 ```
 taskpay/
-├── foundry.toml            # via_ir, solc 0.8.24, remappings
-├── .gitignore
-├── .env.example            # deployment + oracle env template
 ├── src/
-│   └── TaskPay.sol         # the settlement contract (self-contained)
+│   ├── TaskPay.sol            # settlement contract (self-contained)
+│   └── aa/                    # ERC-4337 v0.7 contracts (vendored, upstream GPL-3.0)
+│       ├── core/              #   EntryPoint, SimpleAccount, base account
+│       └── samples/           #   SimpleAccountFactory, VerifyingPaymaster
 ├── test/
-│   ├── TaskPay.t.sol           # 76 unit tests (lifecycle/settlement/dispute/fees/reputation)
-│   ├── TaskPayFuzz.t.sol       # 8 fuzz tests (amounts, vote combos, window boundaries)
-│   ├── TaskPayInvariant.t.sol  # accounting + ghost-counter invariants
+│   ├── TaskPay.t.sol          # unit tests — lifecycle, settlement, disputes, fees, reputation
+│   ├── TaskPayFuzz.t.sol      # fuzz tests — amounts, vote combos, window boundaries
+│   ├── TaskPayInvariant.t.sol # invariant tests — escrow accounting + ghost counters
 │   └── handlers/
-│       └── TaskPayHandler.sol  # bounded random-action handler for invariants
-├── oracle/                  # off-chain AI agent service (see oracle/README.md)
-├── frontend/                # Next.js app: task marketplace + dispute explorer
-│   ├── app/                 #   pages (/, /create, /task/[id]) + /api routes
-│   │   └── api/             #   /api/reasoning, /api/specs — serve the oracle archive
-│   ├── components/          #   connect button, task card, role-aware action panel
-│   └── lib/                 #   wagmi config, chains, typed contract reads/writes
-├── script/Deploy.s.sol      # env-driven deploy script
-└── DEPLOY.md                # testnet (968) + mainnet (677) deployment guide
+├── script/
+│   ├── Deploy.s.sol           # env-driven TaskPay deploy
+│   └── DeployAA.s.sol         # account-abstraction deploy (factory + paymaster)
+├── scripts/                   # Node end-to-end drivers against a live network
+│   ├── live_gasless.mjs       #   sponsored create → accept → submit → release
+│   ├── gasless_http_e2e.mjs   #   the exact HTTP path the frontend uses
+│   └── gasless_dispute_lifecycle.mjs  # full lifecycle incl. dispute + appeal
+├── oracle/                    # off-chain service (see oracle/README.md)
+│   └── src/
+│       ├── agents/            #   Groq AI roles (reviewer, fraudSanity, arbiter, seniorArbiter)
+│       ├── bundler/           #   ERC-4337 sponsor bundler (/v1/quote, /v1/send)
+│       ├── pipeline/          #   dispute → quorum → resolve; challenge → senior arbiter
+│       ├── store/             #   file-backed reasoning + spec archive
+│       └── contract/          #   typed reads, event poller
+├── frontend/                  # Next.js app (see frontend/README.md)
+│   ├── app/                   #   pages (/, /create, /task/[id]) + /api routes
+│   └── components/ lib/       #   UI + wagmi config, typed contract access
+├── data/                      # file archive (shared by oracle + frontend)
+│   ├── specs/{chain}/{id}.json        # task spec text + name (hash is on-chain)
+│   └── reasoning/{chain}/{id}.{role}.json  # AI verdict reasoning
+├── DEPLOY.md                  # deployment guide (testnet 968 / mainnet 677)
+└── .env.example               # shared env template (contract, RPC, oracle keys, AA stack)
 ```
 
-## Build & test
+## Getting started
+
+**Build & test the contract** (requires [Foundry](https://getfoundry.sh); deps: `forge-std`,
+`openzeppelin-contracts@v5.0.2`):
 
 ```bash
-cd taskpay
-forge build          # compiles TaskPay.sol + OZ deps (via_ir)
-forge test           # 85 tests: 76 unit + 8 fuzz + 1 invariant (~3 min)
-forge test --match-path test/TaskPay.t.sol   # fast loop (unit only)
-forge test --profile ci                      # fuzz 256 / invariant 1024 depth
+forge build
+forge test                # unit + fuzz + invariant suites
+forge test --match-path test/TaskPay.t.sol   # fast loop: unit only
 ```
 
-Requires [Foundry](https://getfoundry.sh). Dependencies:
-`forge-std`, `openzeppelin-contracts@v5.0.2`.
-
-## Roadmap
-
-| Phase | Scope | Deliverable |
-|---|---|---|
-| 1 (done) | Core contract + tests | `TaskPay.sol`, 85 tests passing |
-| 2 (done) | Oracle service | TS event poller + Reviewer/FraudSanity/Arbiter/Senior Arbiter agents (`oracle/`, typecheck + build clean); live-tested on testnet with Groq |
-| 3 (done) | Frontend | Next.js + wagmi/viem (injected connector) on testnet 968: task marketplace, create/actions, dispute explorer with archived AI reasoning (`frontend/`, typecheck + build clean) |
-| 4 (done) | Gasless UX | ERC-4337 v0.7 sponsored UserOps: canonical EntryPoint verified live on BOT Chain, own `SimpleAccountFactory` + `VerifyingPaymaster` deployed, oracle doubles as the sponsor bundler (`/v1/quote` + `/v1/send`); users act through their SimpleAccount and pay 0 gas. Live-tested end-to-end (create → accept → submit → release) |
-| 5 | Launchpad integration | Agent identity ↔ reputation registry once BOT Chain's AI Agent Launchpad ships |
-| 6 | Mainnet + fund tracking | Deploy on 677, instrument Option C metrics (valid users / interactions / TVL) |
-
-## ERC-4337 sponsor stack (Phase 4)
-
-BOT Chain has no production 4337 infrastructure (bundler RPC / paymaster), but the
-canonical **EntryPoint v0.7** is deployed at `0x0000000071727De22E5E9d8BAf0edAc6f37da032`
-— verified byte-identical to the mainnet deployment. TaskPay runs its own minimal
-sponsor stack on top of it:
-
-| Contract | Address (testnet 968) | Notes |
-|---|---|---|
-| EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` | canonical, pre-deployed |
-| SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` | counterfactual accounts (owner EOA + salt 0) |
-| VerifyingPaymaster | `0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0` | sponsors gas; signer = oracle key; deposit funded in EntryPoint |
-
-Contracts are vendored from `@account-abstraction/contracts@0.7.0` under `src/aa/`
-(see `script/DeployAA.s.sol`). Those files keep their upstream GPL-3.0 SPDX
-headers; the rest of the repo (TaskPay.sol, oracle, frontend) is MIT. The **oracle service is the bundler**: it exposes
-`POST /v1/quote` (builds the UserOp, attaches the paymaster signature, returns the
-hash to sign) and `POST /v1/send` (simulates with `eth_call`, then broadcasts
-`handleOps` from the oracle EOA; gas settles from the paymaster deposit). The
-frontend signs the UserOp hash with the user's EOA and the whole action executes
-gasless. Roles on-chain become the user's **smart account** (each connected EOA's
-`SimpleAccount`), so identity and gasless UX are the same mechanism.
-
-Verify locally (requires a funded `.env`):
+**Run the oracle** (AI dispute agents + sponsor bundler; env from `taskpay/.env`):
 
 ```bash
-cd oracle && npm run build && cd ..
-node scripts/live_gasless.mjs        # module-level: create→accept→submit→release, all sponsored
-node scripts/gasless_http_e2e.mjs    # HTTP-level, exactly what the frontend does
+cd oracle
+npm install
+npm run dev               # dev (tsx watch) — or npm run build && npm start
 ```
+
+**Run the frontend** (points at testnet 968 + the local oracle):
+
+```bash
+cd frontend
+npm install
+npm run dev               # http://localhost:3000
+```
+
+See `oracle/README.md` and `frontend/README.md` for full configuration, and `DEPLOY.md` for
+deploying the contracts.
+
+## Sponsoring gas (ERC-4337)
+
+BOT Chain ships no production 4337 infrastructure, but the canonical **EntryPoint v0.7** is
+pre-deployed on testnet (byte-identical to mainnet). TaskPay runs its own minimal sponsor stack on
+top of it: a `SimpleAccountFactory` (each user's counterfactual account), a `VerifyingPaymaster`
+(gas funded by an oracle-controlled deposit), and the oracle itself as the bundler.
+
+A TaskPay action therefore costs the user **nothing** — the flow is: frontend builds the contract
+call → the oracle's `/v1/quote` assembles a gas-filled, paymaster-signed UserOp and returns the
+hash to sign → the wallet signs (one popup) → `/v1/send` simulates and broadcasts `handleOps`.
+Roles on-chain are the participants' **smart accounts**, so identity and gasless execution are the
+same mechanism. The one exception is the initial escrow deposit, which a user sends to their own
+account from their wallet — a smart account cannot sponsor the very first transfer that funds it,
+and the app never broadcasts transactions itself.
 
 ## License
 
-MIT
+MIT (vendored ERC-4337 contracts under `src/aa/` retain their upstream GPL-3.0 headers).
