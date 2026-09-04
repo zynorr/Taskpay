@@ -11,3 +11,6 @@ broadcast/
 .env.*
 !.env.example
 !**/.env.example
+
+# Oracle runtime state (ephemeral — rebuilt each boot, unlike the archive dirs)
+data/poller-cursor.json

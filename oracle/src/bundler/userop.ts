@@ -1,6 +1,7 @@
 import { concat, toBeHex, zeroPadValue, getBytes, Interface } from "ethers";
 import { env } from "../config/env.js";
 import { provider, oracleWallet } from "../contract/client.js";
+import { withTxLock } from "../lib/txMutex.js";
 import entryPointAbi from "./abi/EntryPoint.json" with { type: "json" };
 import factoryAbi from "./abi/SimpleAccountFactory.json" with { type: "json" };
 import paymasterAbi from "./abi/VerifyingPaymaster.json" with { type: "json" };
@@ -247,16 +248,24 @@ export async function sendUserOp(userOp: UserOp): Promise<{ txHash: string; user
   const gasPrice = await chainGasPrice();
 
   // Legacy tx (type 0): BOT Chain has baseFeePerGas = 0 and a fixed gas price.
-  const tx = await oracleWallet.sendTransaction({
-    to: ENTRY_POINT,
-    data,
-    gasLimit: (est * 130n) / 100n,
-    gasPrice,
-    type: 0,
+  // The broadcast MUST hold the shared oracle-wallet tx lock: the event poller
+  // and the deadline scanner also send from oracleWallet, and two interleaved
+  // sendTransaction calls would grab the same nonce and replace each other
+  // (ethers does not serialize sends per wallet). The lock keeps exactly one
+  // send + wait in flight at a time.
+  const { txHash } = await withTxLock(async () => {
+    const tx = await oracleWallet.sendTransaction({
+      to: ENTRY_POINT,
+      data,
+      gasLimit: (est * 130n) / 100n,
+      gasPrice,
+      type: 0,
+    });
+    const receipt = await tx.wait();
+    if (!receipt || receipt.status !== 1) {
+      throw new Error(`handleOps tx reverted: ${tx.hash}`);
+    }
+    return { txHash: tx.hash };
   });
-  const receipt = await tx.wait();
-  if (!receipt || receipt.status !== 1) {
-    throw new Error(`handleOps tx reverted: ${tx.hash}`);
-  }
-  return { txHash: tx.hash, userOpHash };
+  return { txHash, userOpHash };
 }
