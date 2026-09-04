@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import TaskCard from "@/components/TaskCard";
 import { ArrowRight, ShieldCheck, Refresh } from "@/components/icons";
-import { fetchAllTasks, fetchDispute, myIdentity } from "@/lib/tasks";
+import { fetchLatestPage, fetchDispute, myIdentity } from "@/lib/tasks";
 import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
 import { formatAmount } from "@/lib/format";
@@ -29,6 +29,10 @@ function isTerminal(s: number) {
   return s >= Status.Released;
 }
 
+// How many tasks the marketplace loads per poll, and how much "Show more"
+// extends the window by. The rest are one click away instead of a hard cap.
+const PAGE_STEP = 24;
+
 export default function HomePage() {
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [disputes, setDisputes] = useState<Record<string, DisputeView>>({});
@@ -38,13 +42,16 @@ export default function HomePage() {
   const [filter, setFilter] = useState<Filter>("all");
   const [myAddrs, setMyAddrs] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [visibleLimit, setVisibleLimit] = useState(PAGE_STEP);
+  const [totalCount, setTotalCount] = useState(0);
   const aliveRef = useRef(true);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (limit: number) => {
     try {
-      const t = await fetchAllTasks(150);
+      const { tasks: t, count } = await fetchLatestPage(limit);
       if (!aliveRef.current) return;
       setTasks(t);
+      setTotalCount(count);
 
       const [d, s] = await Promise.all([
         (async () => {
@@ -79,13 +86,13 @@ export default function HomePage() {
 
   useEffect(() => {
     aliveRef.current = true;
-    load();
-    const id = setInterval(load, 8000);
+    load(visibleLimit);
+    const id = setInterval(() => load(visibleLimit), 8000);
     return () => {
       aliveRef.current = false;
       clearInterval(id);
     };
-  }, [load]);
+  }, [load, visibleLimit]);
 
   useEffect(() => {
     let alive = true;
@@ -121,7 +128,8 @@ export default function HomePage() {
   }, [tasks]);
 
   const filtered = useMemo(() => {
-    const list = [...tasks].reverse();
+    // fetchLatestPage returns newest-first; keep that ordering.
+    const list = tasks;
     if (filter === "active") return list.filter((t) => isActive(t.status));
     if (filter === "disputed") return list.filter((t) => isDisputed(t.status));
     if (filter === "settled") return list.filter((t) => isTerminal(t.status));
@@ -210,7 +218,7 @@ export default function HomePage() {
             <button
               onClick={() => {
                 setRefreshing(true);
-                load().finally(() => setRefreshing(false));
+                load(visibleLimit).finally(() => setRefreshing(false));
               }}
               className="btn-secondary btn-sm !px-2.5"
               title="Refresh now"
@@ -278,6 +286,20 @@ export default function HomePage() {
                 myAddrs={myAddrs}
               />
             ))}
+          </div>
+        )}
+
+        {!loading && totalCount > tasks.length && (
+          <div className="mt-4 flex items-center justify-center gap-3">
+            <p className="text-xs text-faint">
+              Showing {tasks.length} of {totalCount} tasks
+            </p>
+            <button
+              onClick={() => setVisibleLimit((l) => l + PAGE_STEP)}
+              className="btn-secondary btn-sm"
+            >
+              Show more
+            </button>
           </div>
         )}
       </section>

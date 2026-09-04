@@ -208,6 +208,15 @@ function VerdictGrid({ verdicts }: { verdicts: VerdictView[] }) {
   );
 }
 
+function DisputeReasonNote({ reason }: { reason: string }) {
+  return (
+    <div className="rounded-lg border border-warn-line bg-warn-soft px-4 py-3">
+      <div className="micro !text-warn">Requester&apos;s complaint</div>
+      <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-fg">{reason}</p>
+    </div>
+  );
+}
+
 function ReasoningArchive({ reasoning }: { reasoning: ReasoningRow[] }) {
   if (reasoning.length === 0) return null;
   return (
@@ -268,6 +277,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const [dispute, setDispute] = useState<DisputeView | null>(null);
   const [spec, setSpec] = useState<SpecRow | null>(null);
   const [reasoning, setReasoning] = useState<ReasoningRow[]>([]);
+  const [disputeReason, setDisputeReason] = useState<string | null>(null);
   const [rating, setRating] = useState<{ totalScore: bigint; count: bigint } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -305,6 +315,17 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         }
       } catch {
         /* archive may be empty */
+      }
+      try {
+        const res = await fetch(`/api/disputes/${taskId}`);
+        if (res.ok) {
+          const body = await res.json();
+          setDisputeReason(typeof body.reason === "string" ? body.reason : null);
+        } else {
+          setDisputeReason(null);
+        }
+      } catch {
+        /* archive may not have a reason yet */
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -504,7 +525,8 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold text-warn">
             <Scale size={15} /> Dispute
           </h2>
-          <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+          {disputeReason && <DisputeReasonNote reason={disputeReason} />}
+          <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
             <Field label="Tentative outcome">
               <span className={`font-semibold ${dispute?.tentativeApproved ? "text-ok" : "text-bad"}`}>
                 {dispute
@@ -593,6 +615,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               </div>
             </div>
           </div>
+          {disputeReason && <DisputeReasonNote reason={disputeReason} />}
           <h3 className="micro mb-2.5">On-chain verdicts</h3>
           <VerdictGrid verdicts={verdicts} />
           <ReasoningArchive reasoning={reasoning} />

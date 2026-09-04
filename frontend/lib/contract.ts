@@ -179,6 +179,16 @@ export const TASKPAY_ABI = [
     inputs: [{ name: "taskId", type: "uint256" }],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "setCancellationApproval",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "taskId", type: "uint256" },
+      { name: "approved", type: "bool" },
+    ],
+    outputs: [],
+  },
 
   // --- Dispute ---
   {
@@ -313,6 +323,23 @@ export const TASKPAY_ABI = [
       { name: "taskId", type: "uint256", indexed: true },
       { name: "approved", type: "bool", indexed: false },
       { name: "reasoningHash", type: "bytes32", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "CancellationApproval",
+    inputs: [
+      { name: "taskId", type: "uint256", indexed: true },
+      { name: "party", type: "address", indexed: true },
+      { name: "approved", type: "bool", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "TaskCancelled",
+    inputs: [
+      { name: "taskId", type: "uint256", indexed: true },
+      { name: "mutual", type: "bool", indexed: false },
     ],
   },
 ] as const;

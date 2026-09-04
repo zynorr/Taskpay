@@ -19,7 +19,8 @@ type WriteName =
   | "resolveDispute"
   | "finalizeAfterChallenge"
   | "cancelOpenTask"
-  | "reclaimAfterDeadline";
+  | "reclaimAfterDeadline"
+  | "setCancellationApproval";
 
 export async function fetchTaskCount(): Promise<number> {
   const client = getPublicClient(config);
@@ -65,18 +66,49 @@ export async function fetchTask(taskId: bigint): Promise<TaskView> {
   };
 }
 
+// Task ids are dense (0..count-1). Read in small parallel batches so a growing
+// marketplace never issues one serial RPC call per task on every poll.
+const READ_BATCH = 12;
+
+async function readTasksInRange(fromId: bigint, toIdExclusive: bigint): Promise<TaskView[]> {
+  const ids: bigint[] = [];
+  for (let i = fromId; i < toIdExclusive; i++) ids.push(i);
+  const out: TaskView[] = [];
+  for (let s = 0; s < ids.length; s += READ_BATCH) {
+    const chunk = ids.slice(s, s + READ_BATCH);
+    const rows = await Promise.all(
+      chunk.map(async (id) => {
+        try {
+          return await fetchTask(id);
+        } catch {
+          return null; // a missing/inconsistent task should not break the list
+        }
+      }),
+    );
+    for (const r of rows) if (r) out.push(r);
+  }
+  return out;
+}
+
 export async function fetchAllTasks(limit = 100): Promise<TaskView[]> {
   const count = await fetchTaskCount();
+  return readTasksInRange(0n, BigInt(Math.min(count, limit)));
+}
+
+/**
+ * Newest-first page for the marketplace. Reads the latest `limit` task ids
+ * (concurrent batches) and reports the total count so the UI can offer
+ * "load more" without guessing.
+ */
+export async function fetchLatestPage(
+  limit: number,
+): Promise<{ tasks: TaskView[]; count: number }> {
+  const count = await fetchTaskCount();
+  if (count === 0) return { tasks: [], count: 0 };
   const n = Math.min(count, limit);
-  const tasks: TaskView[] = [];
-  for (let i = 0; i < n; i++) {
-    try {
-      tasks.push(await fetchTask(BigInt(i)));
-    } catch {
-      // a missing/inconsistent task should not break the list
-    }
-  }
-  return tasks;
+  const fromId = BigInt(Math.max(count - n, 0));
+  const rows = await readTasksInRange(fromId, BigInt(count));
+  return { tasks: rows.reverse(), count }; // newest first
 }
 
 export async function fetchVerdicts(taskId: bigint): Promise<VerdictView[]> {
@@ -140,6 +172,58 @@ export async function fetchDispute(taskId: bigint): Promise<DisputeView | null> 
   } catch {
     return null;
   }
+}
+
+export interface CancellationState {
+  requester: boolean;
+  agent: boolean;
+}
+
+// Matches TaskPay's CancellationApproval event (see src/TaskPay.sol). Kept as
+// a local literal so viem's getLogs types the args strictly.
+const cancellationApprovalEvent = {
+  type: "event",
+  name: "CancellationApproval",
+  inputs: [
+    { type: "uint256", name: "taskId", indexed: true },
+    { type: "address", name: "party", indexed: true },
+    { type: "bool", name: "approved", indexed: false },
+  ],
+} as const;
+
+/**
+ * Whether each party has approved a mutual cancellation (Accepted/Submitted
+ * only). The contract stores the flags in private state with no public
+ * getter, so derive them from CancellationApproval logs — the latest event
+ * per party wins (approval can be withdrawn by approving false).
+ */
+export async function fetchCancellationApprovals(
+  taskId: bigint,
+  requester: string,
+  agent: string,
+): Promise<CancellationState> {
+  const client = getPublicClient(config);
+  const state: CancellationState = { requester: false, agent: false };
+  try {
+    const logs = await client.getLogs({
+      address: CONTRACT_ADDRESS,
+      event: cancellationApprovalEvent,
+      args: { taskId },
+      fromBlock: 0n,
+      toBlock: "latest",
+    });
+    const req = requester.toLowerCase();
+    const agt = agent.toLowerCase();
+    for (const log of logs) {
+      const party = String(log.args.party ?? "").toLowerCase();
+      const approved = Boolean(log.args.approved);
+      if (party === req) state.requester = approved;
+      else if (party === agt) state.agent = approved;
+    }
+  } catch {
+    /* RPC log filter unavailable — treat as no approvals */
+  }
+  return state;
 }
 
 // specHash for the frontend's create-task flow: keccak256 of the spec text.

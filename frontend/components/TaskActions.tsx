@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { writeGasless, myIdentity } from "@/lib/tasks";
+import { writeGasless, myIdentity, fetchCancellationApprovals, type CancellationState } from "@/lib/tasks";
 import { bundlerUrl } from "@/lib/aa";
 import { Status } from "@/lib/contract";
 import { shortAddress, explorerTx, looksLikeUrl } from "@/lib/format";
@@ -80,6 +80,7 @@ export default function TaskActions({
   const [disputeReason, setDisputeReason] = useState("");
   const [challengeReason, setChallengeReason] = useState("");
   const [rating, setRating] = useState(5);
+  const [cancelApprovals, setCancelApprovals] = useState<CancellationState | null>(null);
 
   const [confirmed, setConfirmed] = useState<{ label: string; hash: string } | null>(null);
 
@@ -98,6 +99,25 @@ export default function TaskActions({
       alive = false;
     };
   }, [isConnected, address]);
+
+  const canMutualCancel =
+    (task.status === Status.Accepted || task.status === Status.Submitted) && smart;
+
+  // Mutual cancellation needs each party's on-chain approval flag. There is no
+  // public getter, so derive it from CancellationApproval logs.
+  useEffect(() => {
+    let alive = true;
+    if (!canMutualCancel) {
+      setCancelApprovals(null);
+      return;
+    }
+    fetchCancellationApprovals(task.taskId, task.requester, task.agent)
+      .then((s) => alive && setCancelApprovals(s))
+      .catch(() => alive && setCancelApprovals(null));
+    return () => {
+      alive = false;
+    };
+  }, [canMutualCancel, task]);
 
   if (!isConnected || !address) {
     return (
@@ -256,7 +276,8 @@ export default function TaskActions({
               />
             </div>
             <p className="text-[11px] leading-relaxed text-faint">
-              Your reason is hashed on-chain; the AI quorum rules on the full deliverable.
+              Your reason is archived and shown on the task page; the AI quorum rules on the full
+              deliverable.
             </p>
             <ActionButton
               tone="danger"
@@ -349,6 +370,66 @@ export default function TaskActions({
           />
         </div>
       )}
+
+      {/* Mutual cancellation (Accepted/Submitted): both parties must agree */}
+      {canMutualCancel && (isRequester || isAgent) && bundlerOnline && (() => {
+        const myApproved = isRequester
+          ? (cancelApprovals?.requester ?? false)
+          : (cancelApprovals?.agent ?? false);
+        const otherApproved = isRequester
+          ? (cancelApprovals?.agent ?? false)
+          : (cancelApprovals?.requester ?? false);
+        const otherRole = isRequester ? "the agent" : "the requester";
+
+        if (!myApproved && !otherApproved) {
+          return (
+            <div className="rounded-lg border border-line bg-subtle p-3.5">
+              <p className="text-[13px] leading-relaxed text-mute">
+                Both parties must agree to cancel — the escrow returns to the requester in full
+                and {otherRole} is released from the task.
+              </p>
+              <div className="mt-2.5">
+                <ActionButton
+                  label="Request mutual cancellation"
+                  busy={busy === "request cancel"}
+                  onClick={() => act("request cancel", "setCancellationApproval", [task.taskId, true])}
+                />
+              </div>
+            </div>
+          );
+        }
+        if (!myApproved && otherApproved) {
+          return (
+            <div className="space-y-2.5 rounded-lg border border-warn-line bg-warn-soft p-3.5">
+              <p className="text-[13px] text-fg">
+                {otherRole === "the requester" ? "The requester" : "The agent"} has requested
+                cancellation. Approving refunds the escrow to the requester and closes the task.
+              </p>
+              <ActionButton
+                tone="danger"
+                label="Approve cancellation — refund escrow"
+                busy={busy === "approve cancel"}
+                onClick={() => act("approve cancel", "setCancellationApproval", [task.taskId, true])}
+              />
+            </div>
+          );
+        }
+        return (
+          <div className="rounded-lg border border-line bg-subtle p-3.5">
+            <p className="text-[13px] text-mute">
+              You proposed cancellation — waiting for {otherRole} to approve. You can withdraw
+              your request while it is pending.
+            </p>
+            <div className="mt-2.5">
+              <ActionButton
+                label="Withdraw cancellation request"
+                busy={busy === "withdraw request"}
+                onClick={() => act("withdraw request", "setCancellationApproval", [task.taskId, false])}
+              />
+            </div>
+          </div>
+        );
+      })()}
 
       {bundlerOnline && smart && (
         <p className="text-[11px] text-faint">

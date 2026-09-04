@@ -3,6 +3,8 @@ import { Status, AgentRole } from "../contract/client.js";
 import { buildTaskContext } from "./context.js";
 import { reviewerAgent, fraudSanityAgent, arbiterAgent, type AgentVerdict } from "../agents/index.js";
 import { submitAgentVerdict } from "../verdict/submit.js";
+import { insertDisputeReason } from "../store/disputes.js";
+import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 import type { DisputeRaisedEvent } from "../contract/events.js";
 
@@ -23,6 +25,22 @@ export async function handleDisputeRaised(event: DisputeRaisedEvent): Promise<vo
     if (task.status !== Status.Disputed) {
       logger.info("dispute_skip_wrong_status", { ...logCtx, status: task.status });
       return;
+    }
+
+    // Archive the requester's human-readable reason (off-chain, first write
+    // wins). The frontend serves it back from the shared data dir, so the
+    // detail page can explain why the AI pipeline is running.
+    try {
+      await insertDisputeReason({
+        chain_id: env.CHAIN_ID,
+        task_id: Number(taskId),
+        requester: event.requester,
+        reason: event.reason,
+        block_number: event.blockNumber,
+        transaction_hash: event.transactionHash,
+      });
+    } catch (err) {
+      logger.warn("dispute_reason_archive_failed", { ...logCtx, error: String(err) });
     }
 
     const existing = {
