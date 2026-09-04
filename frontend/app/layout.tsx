@@ -14,9 +14,18 @@ export const metadata: Metadata = {
     "Post a task, escrow BOT, and let an AI-agent quorum settle disputes — with a Senior Arbiter as the final appeal. Gasless via sponsored ERC-4337 UserOps.",
 };
 
+const themeScript = `(function(){try{var t=localStorage.getItem("taskpay-theme");var d=t==="light"?"light":"dark";document.documentElement.classList.toggle("light",d==="light");}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html
+      lang="en"
+      className={`${GeistSans.variable} ${GeistMono.variable}`}
+      suppressHydrationWarning
+    >
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body className="min-h-screen">
         <Providers>
           <div className="flex min-h-screen flex-col">

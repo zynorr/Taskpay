@@ -5,12 +5,6 @@ import { useAccount, useChainId } from "wagmi";
 import { TARGET_CHAIN_ID, switchToTargetChain } from "@/lib/network";
 import { AlertTriangle } from "./icons";
 
-/**
- * Full-width banner shown when the connected wallet is on the wrong network.
- * Auto-attempts one switch when the mismatch appears, then keeps a manual
- * retry. TaskPay writes are gasless-only (one signature), but funding the
- * TaskPay account happens in-wallet on BOT Chain testnet — hence the guard.
- */
 export default function ChainGuard() {
   const { isConnected } = useAccount();
   const chainId = useChainId();
@@ -33,10 +27,10 @@ export default function ChainGuard() {
   if (!wrong) return null;
 
   return (
-    <div className="border-b border-amber-500/20 bg-amber-500/[0.06]">
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 text-[13px] text-amber-200/90 sm:px-6">
+    <div className="border-b border-warn-line bg-warn-soft">
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-2.5 text-[13px] text-warn sm:px-6">
         <p className="flex items-center gap-2">
-          <AlertTriangle size={15} className="shrink-0 text-amber-400" />
+          <AlertTriangle size={15} className="shrink-0" />
           <span>
             Wallet is on chain {chainId}. TaskPay runs on BOT Chain testnet (chain{" "}
             {TARGET_CHAIN_ID}).
@@ -52,7 +46,7 @@ export default function ChainGuard() {
               .finally(() => setBusy(false));
           }}
           disabled={busy}
-          className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-100 transition hover:bg-amber-500/20 disabled:opacity-50"
+          className="rounded-lg border border-warn-line bg-subtle px-3 py-1.5 text-xs font-medium text-fg transition hover:bg-subtleH disabled:opacity-50"
         >
           {busy ? "Switching…" : "Switch network"}
         </button>

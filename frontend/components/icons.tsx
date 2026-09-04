@@ -143,3 +143,23 @@ export const Package = (p: IconProps) => (
     <path d="M12 11v11" />
   </svg>
 );
+
+export const Sun = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="4" />
+    <path d="M12 2.5v2.5" />
+    <path d="M12 19v2.5" />
+    <path d="M4.9 4.9l1.8 1.8" />
+    <path d="M17.3 17.3l1.8 1.8" />
+    <path d="M2.5 12H5" />
+    <path d="M19 12h2.5" />
+    <path d="m4.9 19.1 1.8-1.8" />
+    <path d="m17.3 6.7 1.8-1.8" />
+  </svg>
+);
+
+export const Moon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11Z" />
+  </svg>
+);

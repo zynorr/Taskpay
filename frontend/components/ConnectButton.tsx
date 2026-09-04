@@ -40,28 +40,28 @@ export default function ConnectButton() {
             }}
             disabled={switching}
             title={`Switch to ${targetChain.name}`}
-            className="hidden items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-200 transition hover:border-amber-500/50 hover:bg-amber-500/20 disabled:opacity-50 md:inline-flex"
+            className="hidden items-center gap-1.5 rounded-lg border border-warn-line bg-warn-soft px-2.5 py-1.5 text-xs font-medium text-warn transition hover:bg-warn-soft disabled:opacity-50 md:inline-flex"
           >
             <Refresh size={13} className={switching ? "animate-spin" : ""} />
             Wrong network
           </button>
         )}
-        <div className="flex items-center overflow-hidden rounded-lg border border-white/10 bg-white/[0.03]">
+        <div className="flex items-center overflow-hidden rounded-lg border border-line bg-subtle">
           <button
             onClick={onCopy}
             title={copied ? "Copied" : "Copy address"}
-            className="flex items-center gap-2 px-2.5 py-1.5 font-mono text-xs text-zinc-200 transition hover:bg-white/[0.06]"
+            className="flex items-center gap-2 px-2.5 py-1.5 font-mono text-xs text-fg transition hover:bg-subtleH"
           >
             <span
               className={`h-1.5 w-1.5 rounded-full ${
-                onRightChain ? "bg-emerald-400" : "bg-amber-400"
+                onRightChain ? "bg-emerald-500" : "bg-amber-500"
               }`}
             />
             {shortAddress(address)}
             {copied ? (
-              <Check size={12} className="text-emerald-400" />
+              <Check size={12} className="text-ok" />
             ) : (
-              <Copy size={12} className="text-zinc-600" />
+              <Copy size={12} className="text-faint" />
             )}
           </button>
           <a
@@ -69,14 +69,14 @@ export default function ConnectButton() {
             target="_blank"
             rel="noreferrer"
             title="View on explorer"
-            className="flex items-center border-l border-white/10 px-2 py-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200"
+            className="flex items-center border-l border-line px-2 py-1.5 text-faint transition hover:bg-subtleH hover:text-fg"
           >
             <ArrowUpRight size={13} />
           </a>
         </div>
         <button
           onClick={() => disconnect()}
-          className="hidden rounded-lg border border-white/10 px-2.5 py-1.5 text-xs text-zinc-500 transition hover:border-rose-500/40 hover:text-rose-300 sm:block"
+          className="hidden rounded-lg border border-line px-2.5 py-1.5 text-xs text-faint transition hover:border-bad-line hover:text-bad sm:block"
         >
           Disconnect
         </button>

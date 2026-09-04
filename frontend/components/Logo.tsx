@@ -33,8 +33,8 @@ export default function Logo({ href = "/" }: { href?: string }) {
   return (
     <Link href={href} className="group flex items-center gap-2.5">
       <LogoMark />
-      <span className="text-[17px] font-semibold tracking-tight text-white">
-        Task<span className="text-zinc-500">Pay</span>
+      <span className="text-[17px] font-semibold tracking-tight text-fg">
+        Task<span className="text-mute">Pay</span>
       </span>
     </Link>
   );

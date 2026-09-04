@@ -2,17 +2,115 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ------------------------------------------------------------------ */
+/* Theme tokens. Dark is the default; <html class="light"> overrides.  */
+/* ------------------------------------------------------------------ */
+:root {
+  --canvas: #09090b;
+  --panel: #131316;
+  --well: #1a1a1f;
+  --subtle: rgba(255, 255, 255, 0.045);
+  --subtle-h: rgba(255, 255, 255, 0.09);
+  --line: rgba(255, 255, 255, 0.1);
+  --line-h: rgba(255, 255, 255, 0.2);
+  --line-soft: rgba(255, 255, 255, 0.06);
+  --fg: #fafafa;
+  --mute: #a1a1aa;
+  --faint: #71717a;
+  --grid-line: rgba(255, 255, 255, 0.035);
+  --shadow-panel:
+    0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -20px rgba(0, 0, 0, 0.9);
+
+  --accent-text: #aea5ff;
+  --accent-line: rgba(122, 104, 255, 0.4);
+  --accent-soft: rgba(122, 104, 255, 0.12);
+  --accent-strong: #6b4eff;
+
+  --ok-text: #6ee7b7;
+  --ok-soft: rgba(16, 185, 129, 0.12);
+  --ok-line: rgba(16, 185, 129, 0.3);
+  --bad-text: #fda4af;
+  --bad-soft: rgba(244, 63, 94, 0.12);
+  --bad-line: rgba(244, 63, 94, 0.3);
+  --warn-text: #fcd34d;
+  --warn-soft: rgba(245, 158, 11, 0.12);
+  --warn-line: rgba(245, 158, 11, 0.3);
+  --warn2-text: #fdba74;
+  --warn2-soft: rgba(249, 115, 22, 0.12);
+  --warn2-line: rgba(249, 115, 22, 0.3);
+  --info-text: #7dd3fc;
+  --info-soft: rgba(14, 165, 233, 0.12);
+  --info-line: rgba(14, 165, 233, 0.3);
+  --vio-text: #c4b5fd;
+  --vio-soft: rgba(139, 92, 246, 0.12);
+  --vio-line: rgba(139, 92, 246, 0.3);
+  --fu-text: #f0abfc;
+  --fu-soft: rgba(217, 70, 239, 0.12);
+  --fu-line: rgba(217, 70, 239, 0.3);
+}
+
+html.light {
+  --canvas: #f6f6f7;
+  --panel: #ffffff;
+  --well: #f0f0f2;
+  --subtle: rgba(24, 24, 27, 0.04);
+  --subtle-h: rgba(24, 24, 27, 0.08);
+  --line: rgba(24, 24, 27, 0.1);
+  --line-h: rgba(24, 24, 27, 0.22);
+  --line-soft: rgba(24, 24, 27, 0.06);
+  --fg: #18181b;
+  --mute: #52525b;
+  --faint: #8a8a93;
+  --grid-line: rgba(24, 24, 27, 0.05);
+  --shadow-panel: 0 1px 2px rgba(24, 24, 27, 0.05), 0 8px 24px -16px rgba(24, 24, 27, 0.12);
+
+  --accent-text: #5a3eeb;
+  --accent-line: rgba(107, 78, 255, 0.35);
+  --accent-soft: rgba(107, 78, 255, 0.09);
+  --accent-strong: #6b4eff;
+
+  --ok-text: #047857;
+  --ok-soft: rgba(5, 150, 105, 0.1);
+  --ok-line: rgba(5, 150, 105, 0.28);
+  --bad-text: #be123c;
+  --bad-soft: rgba(225, 29, 72, 0.09);
+  --bad-line: rgba(225, 29, 72, 0.28);
+  --warn-text: #b45309;
+  --warn-soft: rgba(217, 119, 6, 0.1);
+  --warn-line: rgba(217, 119, 6, 0.3);
+  --warn2-text: #c2410c;
+  --warn2-soft: rgba(234, 88, 12, 0.09);
+  --warn2-line: rgba(234, 88, 12, 0.28);
+  --info-text: #0369a1;
+  --info-soft: rgba(2, 132, 199, 0.09);
+  --info-line: rgba(2, 132, 199, 0.28);
+  --vio-text: #6d28d9;
+  --vio-soft: rgba(124, 58, 237, 0.09);
+  --vio-line: rgba(124, 58, 237, 0.28);
+  --fu-text: #a21caf;
+  --fu-soft: rgba(192, 38, 211, 0.09);
+  --fu-line: rgba(192, 38, 211, 0.28);
+}
+
 @layer base {
   html {
     color-scheme: dark;
   }
+  html.light {
+    color-scheme: light;
+  }
 
   body {
-    @apply bg-ink-950 font-sans text-zinc-200 antialiased;
+    @apply bg-canvas font-sans text-fg antialiased;
     background-image:
-      radial-gradient(56rem 32rem at 82% -12%, rgba(107, 78, 255, 0.09), transparent 60%),
+      radial-gradient(56rem 32rem at 82% -12%, var(--accent-soft), transparent 60%),
       radial-gradient(44rem 28rem at -8% 4%, rgba(56, 189, 248, 0.05), transparent 60%);
     background-attachment: fixed;
+  }
+  html.light body {
+    background-image:
+      radial-gradient(56rem 32rem at 82% -12%, rgba(107, 78, 255, 0.05), transparent 60%),
+      radial-gradient(44rem 28rem at -8% 4%, rgba(2, 132, 199, 0.04), transparent 60%);
   }
 
   ::selection {
@@ -20,35 +118,31 @@
   }
 
   *:focus-visible {
-    @apply outline-none ring-2 ring-iris-500/50 ring-offset-2 ring-offset-ink-950;
+    @apply outline-none ring-2 ring-iris-500/50 ring-offset-2;
+    --tw-ring-offset-color: var(--canvas);
   }
 
-  /* Numeric columns align quietly. */
   .tnum {
     font-variant-numeric: tabular-nums;
   }
 }
 
 @layer components {
-  /* --- Text helpers ------------------------------------------------------ */
+  /* --- Text ----------------------------------------------------------- */
   .micro {
-    @apply text-[11px] font-medium uppercase tracking-[0.09em] text-zinc-500;
+    @apply text-[11px] font-medium uppercase tracking-[0.09em] text-mute;
   }
 
-  /* --- Surfaces ---------------------------------------------------------- */
+  /* --- Surfaces -------------------------------------------------------- */
   .panel {
-    @apply rounded-xl border border-white/[0.07] bg-zinc-900/50 shadow-panel;
-  }
-
-  .panel-strong {
-    @apply rounded-xl border border-white/[0.08] bg-zinc-900/80 shadow-panel;
+    @apply rounded-xl border border-line bg-panel shadow-panel;
   }
 
   .card-link {
-    @apply panel block transition hover:border-white/[0.14] hover:bg-zinc-900/70;
+    @apply panel block transition hover:border-lineH;
   }
 
-  /* --- Buttons ----------------------------------------------------------- */
+  /* --- Buttons --------------------------------------------------------- */
   .btn {
     @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition select-none active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40;
   }
@@ -58,46 +152,45 @@
   }
 
   .btn-secondary {
-    @apply btn border border-white/10 bg-white/[0.03] text-zinc-200 hover:border-white/20 hover:bg-white/[0.06];
+    @apply btn border border-line bg-subtle text-fg hover:border-lineH hover:bg-subtleH;
   }
 
   .btn-danger {
-    @apply btn border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20;
+    @apply btn border border-bad-line bg-bad-soft text-bad hover:bg-bad-soft;
   }
 
   .btn-success {
-    @apply btn border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20;
+    @apply btn border border-ok-line bg-ok-soft text-ok hover:bg-ok-soft;
   }
 
   .btn-sm {
     @apply px-2.5 py-1.5 text-xs;
   }
 
-  /* --- Forms ------------------------------------------------------------- */
+  /* --- Forms ----------------------------------------------------------- */
   .input {
-    @apply w-full rounded-lg border border-white/10 bg-ink-900/80 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 transition focus:border-iris-500/70 focus:outline-none focus:ring-2 focus:ring-iris-500/20;
+    @apply w-full rounded-lg border border-line bg-well px-3 py-2 text-sm text-fg placeholder-faint transition focus:border-iris-500/70 focus:outline-none focus:ring-2 focus:ring-iris-500/20;
   }
 
   .label {
-    @apply mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500;
+    @apply mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-mute;
   }
 
-  /* --- Tags & chips ------------------------------------------------------ */
+  /* --- Tags & chips ---------------------------------------------------- */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-medium text-zinc-300;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-line bg-subtle px-2.5 py-0.5 text-[11px] font-medium text-mute;
   }
 
-  /* --- Misc -------------------------------------------------------------- */
   .copyable {
-    @apply inline-flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 font-mono text-xs text-zinc-300 transition hover:border-white/10 hover:bg-white/[0.04];
+    @apply inline-flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 font-mono text-xs text-mute transition hover:border-line hover:bg-subtle;
   }
 
   .skeleton {
-    @apply animate-shimmer rounded-lg bg-white/[0.05];
+    @apply animate-shimmer rounded-lg bg-subtle;
     background-image: linear-gradient(
       90deg,
       rgba(255, 255, 255, 0) 0%,
-      rgba(255, 255, 255, 0.06) 50%,
+      var(--subtle-h) 50%,
       rgba(255, 255, 255, 0) 100%
     );
     background-size: 400px 100%;
@@ -105,11 +198,37 @@
   }
 
   .divider {
-    @apply h-px w-full bg-white/[0.06];
+    @apply h-px w-full bg-lineSoft;
+  }
+
+  /* --- Semantic banner -------------------------------------------------- */
+  .banner {
+    @apply flex items-start gap-2.5 rounded-lg border px-4 py-3 text-sm;
+  }
+  .banner-ok {
+    @apply banner border-ok-line bg-ok-soft text-ok;
+  }
+  .banner-bad {
+    @apply banner border-bad-line bg-bad-soft text-bad;
+  }
+  .banner-warn {
+    @apply banner border-warn-line bg-warn-soft text-warn;
+  }
+  .banner-info {
+    @apply banner border-info-line bg-info-soft text-info;
+  }
+  .banner-vio {
+    @apply banner border-vio-line bg-vio-soft text-vio;
+  }
+  .banner-fu {
+    @apply banner border-fu-line bg-fu-soft text-fu;
+  }
+  .banner-neutral {
+    @apply banner border-line bg-subtle text-mute;
   }
 }
 
-/* Slim dark scrollbar */
+/* Slim scrollbar */
 ::-webkit-scrollbar {
   width: 10px;
   height: 10px;
@@ -119,17 +238,29 @@
 }
 ::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(128, 128, 140, 0.35);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(128, 128, 140, 0.5);
 }
 
 /* Fine grid backdrop for the hero */
 .hero-grid {
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 36px 36px;
   mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, black 30%, transparent 100%);
+}
+
+/* Smooth theme transition on interactive elements only */
+body,
+.panel,
+.chip,
+.btn,
+.input {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }

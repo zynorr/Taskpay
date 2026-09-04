@@ -4,39 +4,39 @@ import { STATUS_LABELS, Status } from "@/lib/contract";
 
 const TONES: Record<number, { pill: string; dot: string }> = {
   [Status.Created]: {
-    pill: "text-zinc-400 border-white/10 bg-white/[0.03]",
-    dot: "bg-zinc-400",
+    pill: "text-mute border-line bg-subtle",
+    dot: "bg-zinc-500",
   },
   [Status.Accepted]: {
-    pill: "text-sky-300 border-sky-500/25 bg-sky-500/10",
-    dot: "bg-sky-400",
+    pill: "text-info border-info-line bg-info-soft",
+    dot: "bg-sky-500",
   },
   [Status.Submitted]: {
-    pill: "text-violet-300 border-violet-500/25 bg-violet-500/10",
-    dot: "bg-violet-400",
+    pill: "text-vio border-vio-line bg-vio-soft",
+    dot: "bg-violet-500",
   },
   [Status.Disputed]: {
-    pill: "text-amber-300 border-amber-500/25 bg-amber-500/10",
-    dot: "bg-amber-400",
+    pill: "text-warn border-warn-line bg-warn-soft",
+    dot: "bg-amber-500",
   },
   [Status.PendingChallenge]: {
-    pill: "text-orange-300 border-orange-500/25 bg-orange-500/10",
-    dot: "bg-orange-400",
+    pill: "text-warn2 border-warn2-line bg-warn2-soft",
+    dot: "bg-orange-500",
   },
   [Status.Challenged]: {
-    pill: "text-fuchsia-300 border-fuchsia-500/25 bg-fuchsia-500/10",
-    dot: "bg-fuchsia-400",
+    pill: "text-fu border-fu-line bg-fu-soft",
+    dot: "bg-fuchsia-500",
   },
   [Status.Released]: {
-    pill: "text-emerald-300 border-emerald-500/25 bg-emerald-500/10",
-    dot: "bg-emerald-400",
+    pill: "text-ok border-ok-line bg-ok-soft",
+    dot: "bg-emerald-500",
   },
   [Status.Refunded]: {
-    pill: "text-rose-300 border-rose-500/25 bg-rose-500/10",
-    dot: "bg-rose-400",
+    pill: "text-bad border-bad-line bg-bad-soft",
+    dot: "bg-rose-500",
   },
   [Status.Cancelled]: {
-    pill: "text-zinc-500 border-white/10 bg-white/[0.02]",
+    pill: "text-faint border-line bg-subtle",
     dot: "bg-zinc-500",
   },
 };

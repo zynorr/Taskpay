@@ -27,10 +27,12 @@ function ActionButton({
     tone === "danger" ? "btn-danger" : tone === "success" ? "btn-success" : "btn-secondary";
   return (
     <button onClick={onClick} disabled={busy || disabled} className={cls}>
-      {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/25 border-t-current" />}
+      {busy && (
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/25 border-t-current" />
+      )}
       {busy ? "Confirming…" : label}
       {!busy && (
-        <span className="inline-flex items-center gap-1 rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+        <span className="inline-flex items-center gap-1 rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
           <Bolt size={9} /> 0 gas
         </span>
       )}
@@ -40,17 +42,19 @@ function ActionButton({
 
 function ConfirmedTx({ label, hash }: { label: string; hash: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3.5 py-2.5 text-sm text-emerald-100">
-      <Check size={15} className="text-emerald-400" />
-      <span className="font-medium">{label} confirmed</span>
-      <span className="font-mono text-xs text-zinc-500">
-        {hash.slice(0, 10)}…{hash.slice(-6)}
+    <div className="banner-ok !py-2.5">
+      <Check size={15} className="mt-0.5 shrink-0" />
+      <span className="min-w-0 flex-1">
+        <span className="font-medium">{label} confirmed</span>{" "}
+        <span className="font-mono text-xs opacity-70">
+          {hash.slice(0, 10)}…{hash.slice(-6)}
+        </span>
       </span>
       <a
         href={explorerTx(hash)}
         target="_blank"
         rel="noreferrer"
-        className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-300 hover:underline"
+        className="inline-flex shrink-0 items-center gap-1 text-xs underline-offset-2 hover:underline"
       >
         View transaction <ArrowUpRight size={12} />
       </a>
@@ -97,7 +101,7 @@ export default function TaskActions({
 
   if (!isConnected || !address) {
     return (
-      <p className="rounded-lg border border-dashed border-white/10 px-4 py-5 text-center text-[13px] text-zinc-600">
+      <p className="rounded-lg border border-dashed border-line px-4 py-5 text-center text-[13px] text-faint">
         Connect your wallet to act on this task. You will only be asked to sign.
       </p>
     );
@@ -113,12 +117,7 @@ export default function TaskActions({
   const legacyBlocked =
     meSmart !== null && !isRequester && !isAgent && (requester === me || agent === me);
 
-  function act(
-    name: string,
-    fnName: Parameters<typeof writeGasless>[0],
-    args: unknown[],
-    _opts?: { value?: bigint },
-  ) {
+  function act(name: string, fnName: Parameters<typeof writeGasless>[0], args: unknown[]) {
     setBusy(name);
     setError(null);
     setConfirmed(null);
@@ -144,20 +143,23 @@ export default function TaskActions({
   return (
     <div className="space-y-3.5">
       {!bundlerOnline && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 text-[13px] text-amber-200">
+        <div className="banner-warn">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>The sponsor bundler is offline — actions resume when the oracle is running.</span>
         </div>
       )}
       {legacyBlocked && (
-        <p className="rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-500">
-          This task binds your wallet address directly (as {requester === me ? "requester" : "agent"})
-          rather than your TaskPay account. TaskPay is gasless-only now, so this earlier task
-          can&apos;t be acted on from the app — new tasks bind accounts and work fully gasless.
-        </p>
+        <div className="banner-neutral">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>
+            This task binds your wallet address directly (as {requester === me ? "requester" : "agent"})
+            rather than your TaskPay account. TaskPay is gasless-only now, so this earlier task
+            can&apos;t be acted on from the app — new tasks bind accounts and work fully gasless.
+          </span>
+        </div>
       )}
       {error && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-2.5 text-[13px] text-rose-200">
+        <div className="banner-bad">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
           <span>{error}</span>
         </div>
@@ -179,7 +181,7 @@ export default function TaskActions({
         <div className="space-y-2.5">
           {now < task.acceptDeadline ? (
             <>
-              <p className="text-[13px] text-zinc-500">
+              <p className="text-[13px] text-mute">
                 The agent hasn&apos;t accepted yet. Cancel anytime — the escrow is refunded in full.
               </p>
               <ActionButton
@@ -191,7 +193,7 @@ export default function TaskActions({
             </>
           ) : (
             <>
-              <p className="text-[13px] text-rose-300/90">
+              <p className="text-[13px] text-bad">
                 The accept window has closed — the agent can no longer accept. Reclaim the escrow.
               </p>
               <ActionButton
@@ -218,7 +220,7 @@ export default function TaskActions({
               onChange={(e) => setSubmitText(e.target.value)}
             />
             {submitText.trim() && !looksLikeUrl(submitText.trim()) && (
-              <p className="mt-1 text-[11px] text-amber-300/80">
+              <p className="mt-1 text-[11px] text-warn">
                 Tip: include a link — the AI reviewer fetches it during disputes.
               </p>
             )}
@@ -242,16 +244,18 @@ export default function TaskActions({
             busy={busy === "release"}
             onClick={() => act("release", "release", [task.taskId])}
           />
-          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.03] p-3.5">
-            <label className="label !text-rose-300/80">Not satisfied? Raise a dispute</label>
-            <textarea
-              rows={3}
-              className={`${inputCls} !border-rose-500/30`}
-              placeholder="What is wrong with the deliverable — e.g. nothing shipped, requirements missed"
-              value={disputeReason}
-              onChange={(e) => setDisputeReason(e.target.value)}
-            />
-            <p className="mt-1.5 mb-2 text-[11px] leading-relaxed text-zinc-600">
+          <div className="space-y-2.5 rounded-lg border border-bad-line bg-subtle p-3.5">
+            <div>
+              <label className="label !text-bad">Not satisfied? Raise a dispute</label>
+              <textarea
+                rows={3}
+                className={`${inputCls} !border-bad-line`}
+                placeholder="What is wrong with the deliverable — e.g. nothing shipped, requirements missed"
+                value={disputeReason}
+                onChange={(e) => setDisputeReason(e.target.value)}
+              />
+            </div>
+            <p className="text-[11px] leading-relaxed text-faint">
               Your reason is hashed on-chain; the AI quorum rules on the full deliverable.
             </p>
             <ActionButton
@@ -273,7 +277,7 @@ export default function TaskActions({
             busy={busy === "resolve"}
             onClick={() => act("resolve", "resolveDispute", [task.taskId])}
           />
-          <p className="mt-1.5 text-[11px] text-zinc-600">
+          <p className="mt-1.5 text-[11px] text-faint">
             Once two AI agents agree, anyone can apply the ruling on-chain — sponsored.
           </p>
         </div>
@@ -291,29 +295,29 @@ export default function TaskActions({
             />
           )}
           {canChallenge && now <= dispute.challengeDeadline && (
-            <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/[0.03] p-3.5">
-              <label className="label !text-fuchsia-300/80">Appeal to the Senior Arbiter</label>
-              <textarea
-                rows={3}
-                className={`${inputCls} !border-fuchsia-500/30`}
-                placeholder="Why should the Senior Arbiter overturn the quorum ruling?"
-                value={challengeReason}
-                onChange={(e) => setChallengeReason(e.target.value)}
-              />
-              <div className="mt-2.5">
-                <ActionButton
-                  tone="danger"
-                  label="Challenge the ruling"
-                  busy={busy === "challenge"}
-                  disabled={!challengeReason.trim()}
-                  onClick={() =>
-                    act("challenge", "challenge", [
-                      task.taskId,
-                      keccak256(toHex(challengeReason.trim())),
-                    ])
-                  }
+            <div className="space-y-2.5 rounded-lg border border-fu-line bg-subtle p-3.5">
+              <div>
+                <label className="label !text-fu">Appeal to the Senior Arbiter</label>
+                <textarea
+                  rows={3}
+                  className={`${inputCls} !border-fu-line`}
+                  placeholder="Why should the Senior Arbiter overturn the quorum ruling?"
+                  value={challengeReason}
+                  onChange={(e) => setChallengeReason(e.target.value)}
                 />
               </div>
+              <ActionButton
+                tone="danger"
+                label="Challenge the ruling"
+                busy={busy === "challenge"}
+                disabled={!challengeReason.trim()}
+                onClick={() =>
+                  act("challenge", "challenge", [
+                    task.taskId,
+                    keccak256(toHex(challengeReason.trim())),
+                  ])
+                }
+              />
             </div>
           )}
         </div>
@@ -321,7 +325,7 @@ export default function TaskActions({
 
       {/* Released: requester rates the agent */}
       {task.status === Status.Released && isRequester && bundlerOnline && (
-        <div className="flex flex-wrap items-center gap-3.5 rounded-lg border border-white/[0.06] bg-ink-900/50 px-4 py-3">
+        <div className="flex flex-wrap items-center gap-3.5 rounded-lg border border-line bg-well px-4 py-3">
           <div className="flex items-center gap-0.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
@@ -330,14 +334,14 @@ export default function TaskActions({
                 disabled={busy === "rate"}
                 aria-label={`${n} star${n === 1 ? "" : "s"}`}
                 className={`transition hover:scale-110 disabled:opacity-50 ${
-                  n <= rating ? "text-amber-400" : "text-zinc-700 hover:text-zinc-500"
+                  n <= rating ? "text-amber-500" : "text-faint hover:text-mute"
                 }`}
               >
                 <StarFilled />
               </button>
             ))}
           </div>
-          <span className="text-[13px] text-zinc-500">Rate the agent</span>
+          <span className="text-[13px] text-mute">Rate the agent</span>
           <ActionButton
             label={`Submit ${rating} of 5`}
             busy={busy === "rate"}
@@ -347,7 +351,7 @@ export default function TaskActions({
       )}
 
       {bundlerOnline && smart && (
-        <p className="text-[11px] text-zinc-600">
+        <p className="text-[11px] text-faint">
           Acting as <span className="font-mono">{shortAddress(smart)}</span> — no wallet
           transaction is broadcast; actions are sponsored UserOps you only sign.
         </p>

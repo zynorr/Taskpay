@@ -5,7 +5,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Single brand hue (iris) used with alpha modifiers: bg-iris/10, text-iris-300…
+        // Brand hue (kept literal — works on both themes via alpha layering).
         iris: {
           200: "#C9C3FF",
           300: "#AEA5FF",
@@ -15,38 +15,39 @@ const config: Config = {
           700: "#5A3EEB",
           800: "#482FC4",
         },
-        ink: {
-          950: "#09090B",
-          900: "#0E0E11",
-          850: "#121216",
-          800: "#16161B",
-          700: "#1E1E24",
+        // Theme-aware aliases — values flip under <html class="light">.
+        canvas: "var(--canvas)",
+        panel: "var(--panel)",
+        well: "var(--well)",
+        subtle: "var(--subtle)",
+        subtleH: "var(--subtle-h)",
+        line: "var(--line)",
+        lineH: "var(--line-h)",
+        lineSoft: "var(--line-soft)",
+        fg: "var(--fg)",
+        mute: "var(--mute)",
+        faint: "var(--faint)",
+        accent: {
+          DEFAULT: "var(--accent-text)",
+          line: "var(--accent-line)",
+          soft: "var(--accent-soft)",
+          strong: "var(--accent-strong)",
         },
+        ok: { DEFAULT: "var(--ok-text)", soft: "var(--ok-soft)", line: "var(--ok-line)" },
+        bad: { DEFAULT: "var(--bad-text)", soft: "var(--bad-soft)", line: "var(--bad-line)" },
+        warn: { DEFAULT: "var(--warn-text)", soft: "var(--warn-soft)", line: "var(--warn-line)" },
+        warn2: { DEFAULT: "var(--warn2-text)", soft: "var(--warn2-soft)", line: "var(--warn2-line)" },
+        info: { DEFAULT: "var(--info-text)", soft: "var(--info-soft)", line: "var(--info-line)" },
+        vio: { DEFAULT: "var(--vio-text)", soft: "var(--vio-soft)", line: "var(--vio-line)" },
+        fu: { DEFAULT: "var(--fu-text)", soft: "var(--fu-soft)", line: "var(--fu-line)" },
       },
       fontFamily: {
-        sans: [
-          "var(--font-geist-sans)",
-          "ui-sans-serif",
-          "system-ui",
-          "-apple-system",
-          "Segoe UI",
-          "sans-serif",
-        ],
-        mono: [
-          "var(--font-geist-mono)",
-          "ui-monospace",
-          "SFMono-Regular",
-          "Menlo",
-          "Consolas",
-          "monospace",
-        ],
+        sans: ["var(--font-geist-sans)", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
-      letterSpacing: {
-        tightest: "-0.03em",
-      },
+      letterSpacing: { tightest: "-0.03em" },
       boxShadow: {
-        panel: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 12px 32px -20px rgba(0,0,0,0.9)",
-        pop: "0 0 0 1px rgba(255,255,255,0.06), 0 16px 40px -16px rgba(0,0,0,0.85)",
+        panel: "var(--shadow-panel)",
       },
       keyframes: {
         "fade-up": {

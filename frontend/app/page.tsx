@@ -76,7 +76,6 @@ export default function HomePage() {
     };
   }, [load]);
 
-  // Track our identities (EOA + its TaskPay account) for the "Mine" filter.
   useEffect(() => {
     let alive = true;
     myIdentity()
@@ -101,7 +100,13 @@ export default function HomePage() {
         if (isDisputed(t.status)) disputed++;
       }
     }
-    return { total: tasks.length, inEscrow, disputed, settled, active: tasks.length - disputed - settled };
+    return {
+      total: tasks.length,
+      inEscrow,
+      disputed,
+      settled,
+      active: tasks.length - disputed - settled,
+    };
   }, [tasks]);
 
   const filtered = useMemo(() => {
@@ -133,11 +138,7 @@ export default function HomePage() {
 
   const statItems = [
     { label: "Tasks posted", value: String(stats.total) },
-    {
-      label: "In escrow",
-      value: `${formatAmount(stats.inEscrow)} BOT`,
-      sub: `${stats.active} active`,
-    },
+    { label: "In escrow", value: `${formatAmount(stats.inEscrow)} BOT`, sub: `${stats.active} active` },
     { label: "In dispute", value: String(stats.disputed) },
     { label: "Settled", value: String(stats.settled) },
   ];
@@ -145,17 +146,17 @@ export default function HomePage() {
   return (
     <div className="animate-fade-up space-y-10">
       {/* Hero */}
-      <section className="hero-grid relative overflow-hidden rounded-2xl border border-white/[0.06] bg-white/[0.02] px-6 py-12 sm:px-10">
+      <section className="hero-grid relative overflow-hidden rounded-2xl border border-line bg-subtle px-6 py-12 sm:px-10">
         <div className="relative max-w-2xl">
-          <p className="flex items-center gap-2 text-xs font-medium text-zinc-500">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-400" />
+          <p className="flex items-center gap-2 text-xs font-medium text-mute">
+            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             Live on BOT Chain testnet · chain 968
           </p>
-          <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tightest text-white sm:text-[2.75rem]">
+          <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tightest text-fg sm:text-[2.75rem]">
             Agent work, held in escrow{" "}
-            <span className="text-zinc-500">until it&apos;s delivered right.</span>
+            <span className="text-mute">until it&apos;s delivered right.</span>
           </h1>
-          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-zinc-400">
+          <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-mute">
             Post a task with BOT locked on-chain. The agent ships the deliverable and gets paid —
             or an AI quorum settles the dispute, with a Senior Arbiter on appeal. Every action is
             sponsored, so gas never gets in the way.
@@ -173,14 +174,12 @@ export default function HomePage() {
       </section>
 
       {/* Stats */}
-      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.06] sm:grid-cols-4">
+      <section className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-lineSoft sm:grid-cols-4">
         {statItems.map((s) => (
-          <div key={s.label} className="bg-ink-950 px-5 py-4">
+          <div key={s.label} className="bg-canvas px-5 py-4">
             <div className="micro">{s.label}</div>
-            <div className="mt-1 text-xl font-semibold tracking-tight text-zinc-100 tnum">
-              {s.value}
-            </div>
-            {s.sub && <div className="mt-0.5 text-[11px] text-zinc-600">{s.sub}</div>}
+            <div className="mt-1 text-xl font-semibold tracking-tight text-fg tnum">{s.value}</div>
+            {s.sub && <div className="mt-0.5 text-[11px] text-faint">{s.sub}</div>}
           </div>
         ))}
       </section>
@@ -189,9 +188,9 @@ export default function HomePage() {
       <section id="marketplace" className="scroll-mt-24">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <h2 className="text-lg font-semibold tracking-tight text-white">Marketplace</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-fg">Marketplace</h2>
             <span className="chip">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-soft" />
               live · updates automatically
             </span>
           </div>
@@ -207,21 +206,19 @@ export default function HomePage() {
             >
               <Refresh size={13} className={refreshing ? "animate-spin" : ""} />
             </button>
-            <div className="inline-flex items-center gap-0.5 rounded-lg border border-white/10 bg-white/[0.03] p-0.5">
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-subtle p-0.5">
               {FILTERS.map((f) => (
                 <button
                   key={f.key}
                   onClick={() => setFilter(f.key)}
                   className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition ${
                     filter === f.key
-                      ? "bg-white/[0.08] text-white"
-                      : "text-zinc-500 hover:text-zinc-200"
+                      ? "bg-subtleH text-fg"
+                      : "text-mute hover:text-fg"
                   }`}
                 >
                   {f.label}
-                  <span className="ml-1.5 font-mono text-[10px] text-zinc-600 tnum">
-                    {counts[f.key]}
-                  </span>
+                  <span className="ml-1.5 font-mono text-[10px] text-faint tnum">{counts[f.key]}</span>
                 </button>
               ))}
             </div>
@@ -229,8 +226,8 @@ export default function HomePage() {
         </div>
 
         {error && (
-          <div className="mb-4 rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
-            Could not load tasks: {error}
+          <div className="banner-bad mb-4">
+            <span>Could not load tasks: {error}</span>
           </div>
         )}
 
@@ -242,13 +239,11 @@ export default function HomePage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="panel flex flex-col items-center gap-2 px-6 py-16 text-center">
-            <ShieldCheck size={28} className="text-zinc-700" />
-            <p className="text-sm font-medium text-zinc-300">
-              {filter === "mine"
-                ? "No tasks involving your accounts yet."
-                : "No tasks in this view."}
+            <ShieldCheck size={28} className="text-faint" />
+            <p className="text-sm font-medium text-fg">
+              {filter === "mine" ? "No tasks involving your accounts yet." : "No tasks in this view."}
             </p>
-            <p className="max-w-sm text-xs text-zinc-600">
+            <p className="max-w-sm text-xs text-faint">
               {filter === "mine"
                 ? "Post a task or accept one as the designated agent and it will appear here."
                 : "Be the first to post a task and open the marketplace."}
@@ -276,7 +271,7 @@ export default function HomePage() {
       </section>
 
       {/* How it works */}
-      <section className="grid gap-4 border-t border-white/[0.06] pt-8 sm:grid-cols-3">
+      <section className="grid gap-4 border-t border-lineSoft pt-8 sm:grid-cols-3">
         {[
           {
             n: "01",
@@ -295,10 +290,10 @@ export default function HomePage() {
           },
         ].map((s) => (
           <div key={s.n} className="flex gap-4">
-            <span className="font-mono text-xs font-semibold text-iris-400 tnum">{s.n}</span>
+            <span className="font-mono text-xs font-semibold text-accent tnum">{s.n}</span>
             <div>
-              <h3 className="text-sm font-semibold text-zinc-100">{s.t}</h3>
-              <p className="mt-1.5 text-[13px] leading-relaxed text-zinc-500">{s.d}</p>
+              <h3 className="text-sm font-semibold text-fg">{s.t}</h3>
+              <p className="mt-1.5 text-[13px] leading-relaxed text-mute">{s.d}</p>
             </div>
           </div>
         ))}

@@ -7,11 +7,11 @@ import { shortAddress, formatAmount, timeLeft, deadlineUrgency, explorerAddress 
 import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView } from "@/lib/types";
 
-const URGENCY: Record<string, { text: string; label: string }> = {
-  ok: { text: "text-zinc-300", label: "remaining" },
-  soon: { text: "text-amber-300", label: "remaining" },
-  critical: { text: "text-orange-300", label: "remaining" },
-  expired: { text: "text-rose-400", label: "elapsed" },
+const URGENCY: Record<string, string> = {
+  ok: "text-mute",
+  soon: "text-warn",
+  critical: "text-warn2",
+  expired: "text-bad",
 };
 
 export default function TaskCard({
@@ -46,65 +46,58 @@ export default function TaskCard({
 
   const deadlineMeta =
     deadline && urgency ? (
-      <span className={`flex items-center gap-1.5 ${URGENCY[urgency].text}`}>
+      <span className={`flex items-center gap-1.5 ${URGENCY[urgency]}`}>
         <Clock size={13} className="opacity-70" />
         <span className="font-mono text-xs font-semibold tnum">{timeLeft(deadline)}</span>
       </span>
     ) : null;
 
   const stateLine = disputePhase ? (
-    <span className="flex items-center gap-2 text-xs">
+    <span className="flex flex-wrap items-center gap-2 text-xs">
       {dispute ? (
         <>
           <span
             className={`font-medium ${
-              dispute.tentativeApproved ? "text-emerald-300" : "text-rose-300"
+              dispute.tentativeApproved ? "text-ok" : "text-bad"
             }`}
           >
             {dispute.tentativeApproved ? "Tentative: pay agent" : "Tentative: refund"}
           </span>
           {!dispute.hasChallenged && task.status === Status.PendingChallenge && (
-            <span className="text-zinc-500">
+            <span className="text-mute">
               challenge window{" "}
-              <span className="font-mono text-amber-300 tnum">
-                {timeLeft(dispute.challengeDeadline)}
-              </span>
+              <span className="font-mono text-warn tnum">{timeLeft(dispute.challengeDeadline)}</span>
             </span>
           )}
-          {dispute.hasChallenged && (
-            <span className="text-fuchsia-300">Senior Arbiter reviewing</span>
-          )}
+          {dispute.hasChallenged && <span className="text-fu">Senior Arbiter reviewing</span>}
         </>
       ) : (
-        <span className="text-amber-300">AI quorum ruling</span>
+        <span className="text-warn">AI quorum ruling</span>
       )}
     </span>
   ) : task.status === Status.Released ? (
-    <span className="text-xs font-medium text-emerald-300">Escrow paid to agent</span>
+    <span className="text-xs font-medium text-ok">Escrow paid to agent</span>
   ) : task.status === Status.Refunded ? (
-    <span className="text-xs font-medium text-rose-300">Escrow refunded</span>
+    <span className="text-xs font-medium text-bad">Escrow refunded</span>
   ) : task.status === Status.Cancelled ? (
-    <span className="text-xs font-medium text-zinc-500">Cancelled by requester</span>
+    <span className="text-xs font-medium text-faint">Cancelled by requester</span>
   ) : null;
 
   return (
-    <Link
-      href={`/task/${task.taskId}`}
-      className="card-link group p-4 sm:p-5"
-    >
+    <Link href={`/task/${task.taskId}`} className="card-link group p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
         {/* Identity side */}
         <div className="min-w-0 flex-1 space-y-3">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-mono text-sm font-semibold text-zinc-200 tnum">
+            <span className="font-mono text-sm font-semibold text-fg tnum">
               #{task.taskId.toString().padStart(3, "0")}
             </span>
             {isMine && role && (
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
                   role === "requester"
-                    ? "border-iris-500/30 bg-iris-500/10 text-iris-300"
-                    : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+                    ? "border-accent-line bg-accent-soft text-accent"
+                    : "border-info-line bg-info-soft text-info"
                 }`}
               >
                 Your task
@@ -119,18 +112,18 @@ export default function TaskCard({
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="font-mono text-zinc-400 transition hover:text-iris-300"
+              className="font-mono text-mute transition hover:text-accent"
               title="Requester"
             >
               {shortAddress(task.requester)}
             </a>
-            <ArrowRight size={12} className="text-zinc-700" />
+            <ArrowRight size={12} className="text-faint" />
             <a
               href={explorerAddress(task.agent)}
               target="_blank"
               rel="noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="font-mono text-zinc-400 transition hover:text-iris-300"
+              className="font-mono text-mute transition hover:text-accent"
               title="Agent"
             >
               {shortAddress(task.agent)}
@@ -143,9 +136,9 @@ export default function TaskCard({
         <div className="flex items-center justify-end gap-x-8 gap-y-2">
           <div className="text-right">
             <div className="micro">Escrow</div>
-            <div className="mt-0.5 text-[15px] font-semibold text-zinc-100 tnum">
+            <div className="mt-0.5 text-[15px] font-semibold text-fg tnum">
               {formatAmount(task.amount)}
-              <span className="ml-1 text-xs font-normal text-zinc-500">BOT</span>
+              <span className="ml-1 text-xs font-normal text-mute">BOT</span>
             </div>
           </div>
           {deadlineMeta && (
@@ -165,7 +158,7 @@ export default function TaskCard({
 
       {/* Mobile deadline */}
       {deadlineMeta && (
-        <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 sm:hidden">
+        <div className="mt-3 flex items-center justify-between border-t border-lineSoft pt-3 sm:hidden">
           <span className="micro">
             {task.status === Status.Created
               ? "Accept window"
@@ -177,9 +170,8 @@ export default function TaskCard({
         </div>
       )}
 
-      {/* Escrow-at-risk hint when a deadline lapses (short window) */}
       {urgency === "expired" && deadline && (
-        <div className="mt-2 text-[11px] text-zinc-600">
+        <div className="mt-2 text-[11px] text-faint">
           {task.status === Status.Created
             ? "Accept window elapsed — the requester can reclaim the escrow."
             : task.status === Status.Accepted

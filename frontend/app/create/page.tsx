@@ -54,7 +54,7 @@ function DurationSelect({
           </option>
         ))}
       </select>
-      <p className="mt-1 text-[11px] leading-relaxed text-zinc-600">{hint}</p>
+      <p className="mt-1 text-[11px] leading-relaxed text-faint">{hint}</p>
     </div>
   );
 }
@@ -62,9 +62,9 @@ function DurationSelect({
 function SectionTitle({ step, children }: { step: string; children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="font-mono text-[11px] font-semibold text-iris-400">{step}</span>
-      <h2 className="text-[13px] font-semibold tracking-wide text-zinc-200">{children}</h2>
-      <span className="h-px flex-1 bg-white/[0.06]" />
+      <span className="font-mono text-[11px] font-semibold text-accent">{step}</span>
+      <h2 className="text-[13px] font-semibold tracking-wide text-fg">{children}</h2>
+      <span className="h-px flex-1 bg-lineSoft" />
     </div>
   );
 }
@@ -191,8 +191,6 @@ export default function CreateTaskPage() {
 
     setBusy(true);
     try {
-      // Gasless-only: the TaskPay account performs the create through the
-      // oracle's sponsored bundler. The wallet only signs a UserOp hash.
       const res = await writeGasless("createTask", args, { value: amountWei });
       const count = await fetchTaskCount();
       setCreated({ taskId: count - 1, hash: res.hash });
@@ -222,15 +220,15 @@ export default function CreateTaskPage() {
   return (
     <div className="animate-fade-up mx-auto max-w-3xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-white">Post a task</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-zinc-500">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">Post a task</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-mute">
           Lock the payment, name the agent, and let settlement run itself. Disputes are ruled by an
           AI quorum with a Senior Arbiter on appeal.
         </p>
       </div>
 
       {!bundlerOnline && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-200">
+        <div className="banner-warn">
           <AlertTriangle size={16} className="mt-0.5 shrink-0" />
           <span>
             The sponsor bundler is unreachable, and TaskPay is gasless-only. Posting is paused
@@ -240,8 +238,8 @@ export default function CreateTaskPage() {
       )}
 
       {!isConnected && (
-        <div className="flex items-start gap-2.5 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-zinc-400">
-          <Info size={16} className="mt-0.5 shrink-0 text-zinc-600" />
+        <div className="banner-neutral">
+          <Info size={16} className="mt-0.5 shrink-0" />
           <span>Connect your wallet to post a task. You will only ever be asked to sign.</span>
         </div>
       )}
@@ -250,24 +248,24 @@ export default function CreateTaskPage() {
       {connectedReady && smart && (
         <section className="panel p-5">
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <Wallet size={16} className="text-iris-400" />
+            <Wallet size={16} className="text-accent" />
             <div className="min-w-0">
-              <div className="text-sm font-medium text-zinc-100">Your TaskPay account</div>
+              <div className="text-sm font-medium text-fg">Your TaskPay account</div>
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs text-zinc-400">{smart}</span>
+                <span className="font-mono text-xs text-mute">{smart}</span>
                 <button
                   onClick={onCopy}
                   title="Copy address"
-                  className="rounded p-1 text-zinc-600 transition hover:bg-white/[0.06] hover:text-zinc-300"
+                  className="rounded p-1 text-faint transition hover:bg-subtleH hover:text-fg"
                 >
-                  {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
+                  {copied ? <Check size={13} className="text-ok" /> : <Copy size={13} />}
                 </button>
                 <a
                   href={explorerAddress(smart)}
                   target="_blank"
                   rel="noreferrer"
                   title="View on explorer"
-                  className="rounded p-1 text-zinc-600 transition hover:bg-white/[0.06] hover:text-zinc-300"
+                  className="rounded p-1 text-faint transition hover:bg-subtleH hover:text-fg"
                 >
                   <ArrowUpRight size={13} />
                 </a>
@@ -279,10 +277,10 @@ export default function CreateTaskPage() {
           </div>
 
           {smartBalance !== null && smartBalance > 0n && smartUsed === false && (
-            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-sky-500/25 bg-sky-500/[0.06] px-3.5 py-3 text-[13px] leading-relaxed text-sky-200/90">
-              <Info size={15} className="mt-0.5 shrink-0 text-sky-400" />
-              <span>
-                <strong className="font-medium text-sky-100">Account funded, not yet activated.</strong>{" "}
+            <div className="banner-info mt-4 !text-[13px]">
+              <Info size={15} className="mt-0.5 shrink-0" />
+              <span className="leading-relaxed">
+                <strong className="font-medium">Account funded, not yet activated.</strong>{" "}
                 {formatEther(smartBalance)} BOT sits at an address with no code — expected, since
                 accounts deploy on first use. Your first action activates it in the same
                 transaction; only your wallet can spend these funds.
@@ -291,18 +289,16 @@ export default function CreateTaskPage() {
           )}
 
           {underfunded && (
-            <div className="mt-4 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-3">
-              <p className="text-[13px] font-medium text-amber-100">
-                Fund this account to escrow the task
-              </p>
-              <p className="mt-1 text-[13px] leading-relaxed text-amber-200/80">
+            <div className="mt-4 rounded-lg border border-warn-line bg-warn-soft px-3.5 py-3">
+              <p className="text-[13px] font-medium text-fg">Fund this account to escrow the task</p>
+              <p className="mt-1 text-[13px] leading-relaxed text-mute">
                 TaskPay never broadcasts transactions from your wallet — escrow is spent from this
                 account. Send at least{" "}
-                <span className="font-mono font-semibold text-amber-100 tnum">
+                <span className="font-mono font-semibold text-warn tnum">
                   {formatEther(missing ?? 0n)} BOT
                 </span>{" "}
-                to the address above from your wallet on BOT Chain testnet (968). The page
-                unlocks automatically once the deposit lands.
+                to the address above from your wallet on BOT Chain testnet (968). The page unlocks
+                automatically once the deposit lands.
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
                 <button onClick={onCopy} className="btn-secondary btn-sm">
@@ -329,7 +325,7 @@ export default function CreateTaskPage() {
           )}
 
           {!underfunded && smartBalance !== null && smartBalance >= amountWei && smartUsed && (
-            <p className="mt-3 flex items-center gap-2 text-[13px] text-emerald-300/90">
+            <p className="mt-3 flex items-center gap-2 text-[13px] text-ok">
               <Check size={14} /> Account funded — escrow will come from here. Every action is
               sponsored, so this is the only step that moves funds.
             </p>
@@ -345,20 +341,18 @@ export default function CreateTaskPage() {
             <div>
               <label className="label">TaskPay account address</label>
               <input
-                className={`input font-mono ${
-                  agent && !agentValid ? "!border-rose-500/50" : ""
-                }`}
+                className={`input font-mono ${agent && !agentValid ? "!border-bad-line" : ""}`}
                 placeholder="0x…"
                 value={agent}
                 onChange={(e) => setAgent(e.target.value)}
                 spellCheck={false}
               />
-              <p className="mt-1.5 text-[11px] text-zinc-600">
-                The agent acts with sponsored gas from its TaskPay account. Paste its wallet
-                address below and use the suggested account, or paste an account address directly.
+              <p className="mt-1.5 text-[11px] text-faint">
+                The agent acts with sponsored gas from its TaskPay account. Paste its wallet address
+                below and use the suggested account, or paste an account address directly.
               </p>
               {agent && !agentValid && (
-                <p className="mt-1.5 text-xs text-rose-300">
+                <p className="mt-1.5 text-xs text-bad">
                   That does not look like a valid address (0x + 40 hex characters).
                 </p>
               )}
@@ -379,9 +373,9 @@ export default function CreateTaskPage() {
                 onChange={(e) => setSpecText(e.target.value)}
               />
               {specText.trim() && (
-                <p className="mt-1.5 flex items-center gap-2 font-mono text-[11px] text-zinc-600">
+                <p className="mt-1.5 flex items-center gap-2 font-mono text-[11px] text-faint">
                   spec hash
-                  <span className="text-zinc-500">{shortHash(specHashOf(specText.trim()))}</span>
+                  <span className="text-mute">{shortHash(specHashOf(specText.trim()))}</span>
                 </p>
               )}
             </div>
@@ -400,9 +394,7 @@ export default function CreateTaskPage() {
                     value={amount}
                     onChange={(e) => setAmount(e.target.value)}
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-zinc-500">
-                    BOT
-                  </span>
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-faint">BOT</span>
                 </div>
                 <div className="flex gap-1.5">
                   {AMOUNT_CHIPS.map((c) => (
@@ -412,8 +404,8 @@ export default function CreateTaskPage() {
                       onClick={() => setAmount(c)}
                       className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition tnum ${
                         amount === c
-                          ? "border-iris-500/60 bg-iris-500/15 text-iris-200"
-                          : "border-white/10 bg-white/[0.02] text-zinc-500 hover:border-white/20 hover:text-zinc-300"
+                          ? "border-accent-line bg-accent-soft text-accent"
+                          : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
                       }`}
                     >
                       {c}
@@ -422,7 +414,7 @@ export default function CreateTaskPage() {
                 </div>
               </div>
               {amount && !amountValid && (
-                <p className="mt-1.5 text-xs text-rose-300">Escrow must be greater than 0 BOT.</p>
+                <p className="mt-1.5 text-xs text-bad">Escrow must be greater than 0 BOT.</p>
               )}
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -452,24 +444,22 @@ export default function CreateTaskPage() {
 
           {/* Summary */}
           {(specText.trim() || agentValid) && (
-            <div className="rounded-lg border border-white/[0.06] bg-ink-900/60 px-4 py-3 text-[13px]">
+            <div className="rounded-lg border border-line bg-well px-4 py-3 text-[13px]">
               <div className="micro mb-2">Summary</div>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
                 <div>
-                  <dt className="text-[11px] text-zinc-600">Agent</dt>
-                  <dd className="font-mono text-zinc-300">
-                    {agentValid ? shortAddress(agent.trim()) : "—"}
-                  </dd>
+                  <dt className="text-[11px] text-faint">Agent</dt>
+                  <dd className="font-mono text-mute">{agentValid ? shortAddress(agent.trim()) : "—"}</dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-zinc-600">Escrow</dt>
-                  <dd className="font-mono text-zinc-300 tnum">
+                  <dt className="text-[11px] text-faint">Escrow</dt>
+                  <dd className="font-mono text-mute tnum">
                     {amountValid ? `${formatEther(amountWei)} BOT` : "—"}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-[11px] text-zinc-600">Timeline</dt>
-                  <dd className="text-zinc-300">
+                  <dt className="text-[11px] text-faint">Timeline</dt>
+                  <dd className="text-mute">
                     {formatDurationLabel(Number(acceptWindow))} accept ·{" "}
                     {formatDurationLabel(Number(workDuration))} work ·{" "}
                     {formatDurationLabel(Number(reviewPeriod))} review
@@ -480,19 +470,19 @@ export default function CreateTaskPage() {
           )}
 
           {error && (
-            <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-4 py-3 text-sm text-rose-200">
+            <div className="banner-bad">
               <AlertTriangle size={15} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {created && (
-            <div className="flex items-start gap-3 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-4 py-3.5">
-              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/20">
-                <Check size={14} className="text-emerald-300" />
+            <div className="flex items-start gap-3 rounded-lg border border-ok-line bg-ok-soft px-4 py-3.5">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ok-soft text-ok">
+                <Check size={14} />
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-emerald-100">
+                <p className="text-sm font-medium text-fg">
                   Task #{created.taskId} created — zero gas paid
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -506,7 +496,7 @@ export default function CreateTaskPage() {
                     href={explorerTx(created.hash)}
                     target="_blank"
                     rel="noreferrer"
-                    className="inline-flex items-center gap-1 text-emerald-200/80 hover:text-emerald-100"
+                    className="inline-flex items-center gap-1 text-mute transition hover:text-fg"
                   >
                     Transaction <ArrowUpRight size={12} />
                   </a>
@@ -530,14 +520,14 @@ export default function CreateTaskPage() {
             ) : (
               <>
                 Create task
-                <span className="inline-flex items-center gap-1 rounded-md bg-black/20 px-1.5 py-0.5 text-[11px] font-medium text-emerald-200">
+                <span className="inline-flex items-center gap-1 rounded-md bg-white/15 px-1.5 py-0.5 text-[11px] font-medium text-white">
                   <Bolt size={11} /> 0 gas
                 </span>
               </>
             )}
           </button>
           {underfunded && (
-            <p className="text-center text-[11px] text-zinc-600">
+            <p className="text-center text-[11px] text-faint">
               Posting unlocks the moment your account holds the escrow — no wallet transaction from
               this app, ever.
             </p>
@@ -624,9 +614,9 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
   let check: React.ReactNode = null;
   if (info.hasCode && info.owner === null) {
     check = (
-      <div className="mt-2 flex items-start gap-2.5 rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-2.5 text-[13px] leading-relaxed text-rose-200">
-        <AlertTriangle size={15} className="mt-0.5 shrink-0 text-rose-400" />
-        <span>
+      <div className="banner-bad mt-2 !py-2.5 !text-[13px]">
+        <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+        <span className="leading-relaxed">
           This address has code but is <strong className="font-medium">not a TaskPay account</strong>{" "}
           (no owner). It can never accept a task — creating anyway locks the escrow until you
           cancel or reclaim.
@@ -638,14 +628,14 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
       <p className="mt-2 flex items-start gap-2 text-[13px] leading-relaxed">
         {info.fromFactory ? (
           <>
-            <Check size={15} className="mt-0.5 shrink-0 text-emerald-400" />
-            <span className="text-zinc-300">
+            <Check size={15} className="mt-0.5 shrink-0 text-ok" />
+            <span className="text-mute">
               Verified TaskPay account — owned by{" "}
               <a
                 href={explorerAddress(info.owner)}
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-emerald-300 underline-offset-2 hover:underline"
+                className="font-mono text-ok underline-offset-2 hover:underline"
               >
                 {shortAddress(info.owner)}
               </a>
@@ -653,19 +643,19 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
           </>
         ) : (
           <>
-            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-400" />
-            <span className="text-amber-200/90">
+            <AlertTriangle size={15} className="mt-0.5 shrink-0 text-warn" />
+            <span className="text-mute">
               Contract with an owner (
               <a
                 href={explorerAddress(info.owner)}
                 target="_blank"
                 rel="noreferrer"
-                className="font-mono text-amber-300 underline-offset-2 hover:underline"
+                className="font-mono text-warn underline-offset-2 hover:underline"
               >
                 {shortAddress(info.owner)}
               </a>
-              ) but not TaskPay&apos;s standard account for that owner. Confirm it&apos;s the account
-              you intend to hire.
+              ) but not TaskPay&apos;s standard account for that owner. Confirm it&apos;s the account you
+              intend to hire.
             </span>
           </>
         )}
@@ -673,10 +663,10 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
     );
   } else {
     check = (
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-iris-500/20 bg-iris-500/[0.05] px-3.5 py-2.5 text-[13px] text-zinc-400">
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent-line bg-accent-soft px-3.5 py-2.5 text-[13px] text-mute">
         <span className="min-w-0 leading-relaxed">
           This is a plain wallet — it acts on-chain as its account{" "}
-          <span className="font-mono text-iris-200">{info.smart}</span>, deployed on first use.
+          <span className="font-mono text-accent">{info.smart}</span>, deployed on first use.
         </span>
         <button
           type="button"
@@ -690,11 +680,11 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
   }
 
   const ratingLine = ratingLoaded ? (
-    <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-zinc-600">
+    <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-faint">
       {rating && rating.count > 0n ? (
         <>
-          <Star size={11} className="text-amber-400" />
-          <span className="text-zinc-400 tnum">
+          <Star size={11} className="text-amber-500" />
+          <span className="text-mute tnum">
             {(Number(rating.totalScore) / Number(rating.count)).toFixed(1)}
           </span>
           <span>
