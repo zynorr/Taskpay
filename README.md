@@ -30,6 +30,7 @@ when a dispute is actually raised.
 ## Architecture
 
 ```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 16, "rankSpacing": 32, "padding": 4, "useMaxWidth": true}}}%%
 flowchart TB
   subgraph FE["Frontend (Next.js)"]
     UI["marketplace · create · task detail · reasoning archive"]
