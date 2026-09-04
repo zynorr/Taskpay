@@ -35,6 +35,9 @@ export interface OracleEnv {
   ENTRY_POINT?: string;
   AA_FACTORY?: string;
   PAYMASTER?: string;
+  // Max sponsored ops per address per minute (0 disables). Protects the open
+  // sponsor endpoints from being drained as a free-gas faucet.
+  BUNDLER_RATE_LIMIT?: number;
 }
 
 function isValidUrl(value: string): boolean {
@@ -104,6 +107,14 @@ function validate(): OracleEnv {
     startBlock = parsePositiveInt(raw.ORACLE_START_BLOCK, "ORACLE_START_BLOCK", errors);
   }
 
+  let bundlerRateLimit: number | undefined;
+  if (raw.ORACLE_BUNDLER_RATE_LIMIT !== undefined && raw.ORACLE_BUNDLER_RATE_LIMIT !== "") {
+    bundlerRateLimit = Number(raw.ORACLE_BUNDLER_RATE_LIMIT);
+    if (!Number.isInteger(bundlerRateLimit) || bundlerRateLimit < 0) {
+      errors.push(`ORACLE_BUNDLER_RATE_LIMIT must be a non-negative integer (got "${raw.ORACLE_BUNDLER_RATE_LIMIT}").`);
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid oracle environment configuration:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
   }
@@ -123,6 +134,7 @@ function validate(): OracleEnv {
     ENTRY_POINT: raw.ENTRY_POINT || undefined,
     AA_FACTORY: raw.AA_FACTORY || undefined,
     PAYMASTER: raw.PAYMASTER || undefined,
+    BUNDLER_RATE_LIMIT: bundlerRateLimit,
   };
 }
 

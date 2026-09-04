@@ -3,6 +3,7 @@ import { isAddress } from "ethers";
 import { logger } from "../lib/logger.js";
 import { env } from "../config/env.js";
 import { buildQuote, sendUserOp, type UserOp } from "./userop.js";
+import { SlidingWindowLimiter } from "./rateLimit.js";
 
 /**
  * HTTP surface of the sponsor bundler, mounted under /v1 by index.ts.
@@ -13,7 +14,17 @@ import { buildQuote, sendUserOp, type UserOp } from "./userop.js";
  * CORS is wide open: the only client is the TaskPay frontend, and the endpoints
  * only relay already-signed ops for a single known contract. Do not add secret
  * data here.
+ *
+ * Rate limiting: every quote/send is counted per address in a sliding window
+ * (default 20 ops/min, tune via ORACLE_BUNDLER_RATE_LIMIT, 0 disables). The
+ * sponsor pays gas for every broadcast /v1/send, so an unauthenticated public
+ * URL must not be a free-gas faucet.
  */
+
+// One shared limiter for both endpoints, keyed by the acting address. Default
+// 20 ops/min comfortably covers the whole task lifecycle for a human while
+// stopping scripted drains; env 0 turns it off (private deployments).
+const limiter = new SlidingWindowLimiter(env.BUNDLER_RATE_LIMIT ?? 20, 60_000);
 
 export function isBundlerConfigured(): boolean {
   return Boolean(env.AA_FACTORY && env.PAYMASTER);
@@ -41,6 +52,18 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
 
 function bad(res: ServerResponse, message: string): void {
   sendJson(res, 400, { ok: false, error: message });
+}
+
+function tooMany(res: ServerResponse): void {
+  sendJson(res, 429, {
+    ok: false,
+    error: `rate limit exceeded — ${limiterLimit()} ops per address per minute`,
+    retryAfterSec: 60,
+  });
+}
+
+function limiterLimit(): number {
+  return env.BUNDLER_RATE_LIMIT ?? 20;
 }
 
 export async function handleBundlerRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -81,6 +104,10 @@ export async function handleBundlerRequest(req: IncomingMessage, res: ServerResp
       if (!isAddress(owner)) return bad(res, "owner must be an address");
       if (!isAddress(target)) return bad(res, "target must be an address");
       if (!/^0x[0-9a-fA-F]*$/.test(callData)) return bad(res, "callData must be 0x-hex");
+      if (!limiter.allow(`quote:${owner.toLowerCase()}`)) {
+        logger.warn("bundler_rate_limited", { path, owner });
+        return tooMany(res);
+      }
 
       const quote = await buildQuote({
         owner,
@@ -105,6 +132,10 @@ export async function handleBundlerRequest(req: IncomingMessage, res: ServerResp
     if (!userOp || typeof userOp !== "object") return bad(res, "userOp is required");
     if (!isAddress(userOp.sender)) return bad(res, "userOp.sender must be an address");
     if (!/^0x[0-9a-fA-F]*$/.test(signature)) return bad(res, "signature must be 0x-hex");
+    if (!limiter.allow(`send:${userOp.sender.toLowerCase()}`)) {
+      logger.warn("bundler_rate_limited", { path, sender: userOp.sender });
+      return tooMany(res);
+    }
 
     userOp.signature = signature;
     userOp.nonce = BigInt(userOp.nonce);

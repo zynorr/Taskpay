@@ -6,6 +6,7 @@ import { handleDisputeRaised } from "./pipeline/handleDispute.js";
 import { handleChallengeRaised } from "./pipeline/handleChallenge.js";
 import { runAutoActionsScan } from "./pipeline/autoActions.js";
 import { handleBundlerRequest } from "./bundler/routes.js";
+import { PaymasterDepositMonitor } from "./monitor/paymaster.js";
 
 logger.info("oracle_starting", {
   contractAddress: env.CONTRACT_ADDRESS,
@@ -19,6 +20,15 @@ logger.info("oracle_starting", {
 // frontend run gasless TaskPay actions through the oracle's bundler. Both run
 // alongside the polling loop, not instead of it.
 const port = Number(process.env.PORT) || 3000;
+
+// Tracks the sponsor's gas budget: every gasless action debits the paymaster
+// deposit at the EntryPoint, and an empty deposit hard-stops all UserOps
+// (AA31). Logs a warning before that happens and exposes the cached snapshot
+// on /health so uptime monitors and the frontend can react.
+const depositMonitor = new PaymasterDepositMonitor();
+
+depositMonitor.start();
+
 const healthServer = createServer((req, res) => {
   const url = new URL(req.url ?? "/", "http://localhost");
   if (url.pathname.startsWith("/v1/")) {
@@ -26,7 +36,12 @@ const healthServer = createServer((req, res) => {
     return;
   }
   res.writeHead(200, { "Content-Type": "application/json" });
-  res.end(JSON.stringify({ status: "taskpay oracle running" }));
+  res.end(
+    JSON.stringify({
+      status: "taskpay oracle running",
+      paymaster: depositMonitor.snapshot(),
+    }),
+  );
 });
 healthServer.listen(port, () => {
   logger.info("health_server_listening", { port });
@@ -70,6 +85,7 @@ logger.info("oracle_started");
 async function shutdown(signal: string): Promise<void> {
   logger.info("oracle_shutting_down", { signal });
   poller.stop();
+  depositMonitor.stop();
   clearInterval(scanTimer);
   healthServer.close();
   // Give in-flight work a chance to finish (Render sends SIGTERM on every
