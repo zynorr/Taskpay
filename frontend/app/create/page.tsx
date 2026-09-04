@@ -57,6 +57,10 @@ export default function CreateTaskPage() {
   const [reviewPeriod, setReviewPeriod] = useState("259200");
   const [smart, setSmart] = useState<string | null>(null);
   const [smartBalance, setSmartBalance] = useState<bigint | null>(null);
+  // An account is "used" once it has been deployed on-chain (its first UserOp).
+  // Before that, external deposits sit at a code-less address — worth telling
+  // the user this is expected and that the first action deploys it.
+  const [smartUsed, setSmartUsed] = useState<boolean | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -74,18 +78,21 @@ export default function CreateTaskPage() {
   }, [amount]);
   const amountValid = amountWei > 0n;
 
-  const fetchBalance = useCallback(async (smartAddr: string) => {
+  const refreshAccount = useCallback(async (smartAddr: string) => {
     try {
       const [{ getPublicClient }, { config }] = await Promise.all([
         import("@wagmi/core"),
         import("@/lib/wagmi"),
       ]);
-      const bal = (await getPublicClient(config).getBalance({
-        address: smartAddr as `0x${string}`,
-      })) as bigint;
-      setSmartBalance(bal);
+      const client = getPublicClient(config);
+      const [bal, code] = await Promise.all([
+        client.getBalance({ address: smartAddr as `0x${string}` }),
+        client.getCode({ address: smartAddr as `0x${string}` }),
+      ]);
+      setSmartBalance(bal as bigint);
+      setSmartUsed((code?.length ?? 0) > 0);
     } catch {
-      /* keep the last known balance */
+      /* keep the last known state */
     }
   }, []);
 
@@ -101,21 +108,21 @@ export default function CreateTaskPage() {
       .then(async ({ smart: s }) => {
         if (!alive) return;
         setSmart(s);
-        if (s) await fetchBalance(s);
+        if (s) await refreshAccount(s);
       })
       .catch(() => alive && setSmart(null));
     return () => {
       alive = false;
     };
-  }, [isConnected, address, fetchBalance]);
+  }, [isConnected, address, refreshAccount]);
 
   // While the account is short of escrow, watch for the external deposit
   // (the app never signs a funding transaction — it arrives from the wallet).
   useEffect(() => {
     if (!smart || smartBalance === null || smartBalance >= amountWei) return;
-    const t = setInterval(() => fetchBalance(smart), 4000);
+    const t = setInterval(() => refreshAccount(smart), 4000);
     return () => clearInterval(t);
-  }, [smart, smartBalance, amountWei, fetchBalance]);
+  }, [smart, smartBalance, amountWei, refreshAccount]);
 
   const underfunded = smart !== null && smartBalance !== null && smartBalance < amountWei;
   const missing = smartBalance === null ? null : amountWei - smartBalance;
@@ -171,6 +178,8 @@ export default function CreateTaskPage() {
       const res = await writeGasless("createTask", args, { value: amountWei });
       const count = await fetchTaskCount();
       setCreated({ taskId: count - 1, hash: res.hash });
+      // The account is now deployed/used — reflect it (and the spent escrow).
+      if (smart) void refreshAccount(smart);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -242,6 +251,21 @@ export default function CreateTaskPage() {
             </span>
           </p>
 
+          {smartBalance !== null && smartBalance > 0n && smartUsed === false && smart && (
+            <div className="mt-3 rounded-xl border border-cyan-900/50 bg-cyan-950/20 p-3 text-xs text-cyan-200">
+              <p className="font-medium text-cyan-100">
+                Funded — not activated yet
+              </p>
+              <p className="mt-1 leading-relaxed text-cyan-300/80">
+                {formatEther(smartBalance)} BOT is on{" "}
+                <span className="font-mono">{shortAddress(smart)}</span>, which has no code on-chain
+                yet. That&apos;s expected: TaskPay accounts are deployed by your first gasless action,
+                in the same transaction. The deposit is safe — only your wallet can activate and
+                spend this account.
+              </p>
+            </div>
+          )}
+
           {smartBalance !== null && underfunded ? (
             <div className="mt-3 space-y-2 rounded-xl border border-amber-900/50 bg-amber-950/20 p-3 text-xs text-amber-200">
               <p className="font-medium text-amber-100">
@@ -281,7 +305,8 @@ export default function CreateTaskPage() {
             </div>
           ) : (
             smartBalance !== null &&
-            smartBalance >= amountWei && (
+            smartBalance >= amountWei &&
+            smartUsed === true && (
               <p className="mt-2 text-xs text-emerald-400/80">
                 ✓ Funded — escrow will come from this account. Your one-time top-up was done
                 outside the app; every TaskPay action here is sponsored.
