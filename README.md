@@ -29,36 +29,33 @@ when a dispute is actually raised.
 
 ## Architecture
 
-```
-┌────────────────────────────┐        ┌──────────────────────────────────────────────┐
-│  Frontend (Next.js)        │        │  Oracle (TypeScript)                          │
-│  ─ marketplace / create /  │        │  ─ event poller (DisputeRaised, Challenge)   │
-│    task detail / archive   │        │  ─ deadline scanner (auto-finalize)          │
-│  ─ reads contract + local  │        │  ─ AI agents (Groq):                          │
-│    /api routes             │        │      Reviewer · FraudSanity · Arbiter ·       │
-│  ─ wallet: sign only       │        │      Senior Arbiter                           │
-│    (no gas, no broadcast)  │        │  ─ ERC-4337 sponsor bundler (/v1/quote,       │
-└────────────┬───────────────┘        │      /v1/send) + paymaster signer             │
-             │ UserOps (signed)       └───────┬──────────────────────────────┬────────┘
-             │                                │ handleOps (oracle key,        │ events /
-             ▼                                │ paymaster covers gas)         │ tx (deadline)
-┌─────────────────────────────────────────────▼──────────────────────────────▼────────┐
-│  BOT Chain (testnet 968)                                                             │
-│  ┌──────────────────────────┐   ┌──────────────────────────┐   ┌──────────────────┐  │
-│  │ TaskPay.sol              │   │ EntryPoint v0.7          │   │ SimpleAccount    │  │
-│  │  escrow · status ·       │   │ (canonical, pre-deployed)│   │ per user         │  │
-│  │  verdicts · reputation   │   └──────────────────────────┘   │ (factory-created)│  │
-│  └──────────────────────────┘   ┌──────────────────────────┐   └──────────────────┘  │
-│  Escrowed BOT lives here.       │ VerifyingPaymaster       │                          │
-│  Only a spec hash + verdict     │  deposit pays gas        │                          │
-│  reasoning hashes are stored   └──────────────────────────┘                          │
-│  on-chain — full text lives    ┌──────────────────────────┐                          │
-│  in the file archive.          │ file archive (data/)     │                          │
-│                                │  specs/{chain}/{id}.json │                          │
-│                                │  reasoning/{chain}/{id}. │                          │
-│                                │    {role}.json           │                          │
-│                                └──────────────────────────┘                          │
-└───────────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph FE["Frontend (Next.js)"]
+    UI["marketplace · create · task detail · reasoning archive"]
+    W["wallet — signs one UserOp hash, never broadcasts"]
+  end
+  subgraph OR["Oracle (TypeScript)"]
+    POLL["event poller + deadline scanner"]
+    AI["AI agents on Groq —<br/>Reviewer · FraudSanity · Arbiter · Senior Arbiter"]
+    BUN["ERC-4337 sponsor bundler<br/>/v1/quote · /v1/send + paymaster signer"]
+  end
+  subgraph CH["BOT Chain (testnet 968)"]
+    TP["TaskPay.sol —<br/>escrow · status · verdicts · reputation"]
+    EP["EntryPoint v0.7 + VerifyingPaymaster"]
+    SA["per-user SimpleAccount (factory-created)"]
+  end
+  ARC["file archive data/ —<br/>spec text · reasoning text"]
+
+  UI -->|signed UserOp| BUN
+  BUN -->|handleOps, gas from paymaster| EP
+  EP --> SA --> TP
+  TP -->|DisputeRaised / ChallengeRaised events| POLL
+  POLL --> AI
+  AI -->|submitVerdict (reasoning hash)| TP
+  POLL -->|auto-finalize past deadlines| TP
+  UI -->|reads on-chain state| TP
+  UI -->|serves / reads| ARC
 ```
 
 **On-chain vs off-chain.** The contract stores only what must be tamper-proof and readable by
@@ -78,20 +75,26 @@ anchored on-chain by its hash, so an archived row can always be verified against
 
 ### Contract: lifecycle & statuses
 
-```
-                     accept                    submit work               requester releases ──► Released (agent paid)
-Created ──────────► Accepted ────────────────► Submitted ──────────────┤
-   │                    │                          │                    └ review window lapses ──► Released (finalizeAfterReview, anyone)
-   │                    │                          └ requester disputes ─► Disputed
-   └ accept window      └ work deadline            (or refundExpiredTask   │
-      lapses →            lapses → Refunded          past work deadline)    │  Reviewer + FraudSanity
-      Reclaimed /          (requester refunds)                              │  (Arbiter on split) → 2-of-3
-      Cancelled                                                                ▼
-                                                                      PendingChallenge (tentative outcome + window)
-                                                                           │ losing party challenges
-                                                                           ▼
-                                                                     Challenged ──► Senior Arbiter verdict ──► Released | Refunded
-                                                                           └ window lapses / arbiter timeout → tentative outcome
+```mermaid
+stateDiagram-v2
+    [*] --> Created : createTask (escrow locked)
+    Created --> Accepted : acceptTask (agent only, before accept deadline)
+    Created --> Cancelled : cancelOpenTask (requester, anytime before accept)
+    Created --> Refunded : reclaimAfterDeadline (requester, accept window passed)
+    Accepted --> Submitted : submitWork
+    Accepted --> Refunded : refundExpiredTask (requester, work deadline passed)
+    Submitted --> Released : release (requester)
+    Submitted --> Released : finalizeAfterReview (anyone, review window passed)
+    Submitted --> Disputed : raiseDispute (requester)
+    Disputed --> PendingChallenge : resolveDispute (2-of-3 quorum → tentative outcome)
+    Disputed --> Refunded : refundAfterStalledDispute (no quorum before review lapse)
+    PendingChallenge --> Released : unchallenged → tentative outcome after window
+    PendingChallenge --> Challenged : challenge (losing party)
+    Challenged --> Released : Senior Arbiter verdict
+    Challenged --> Refunded : Senior Arbiter verdict / arbiter timeout → tentative
+    Released --> [*] : agent paid (fee only on this path)
+    Refunded --> [*] : escrow returned
+    Cancelled --> [*] : escrow returned
 ```
 
 Every deadline transition is callable on-chain without the oracle — **the oracle is a
@@ -115,7 +118,7 @@ the contract, not by uptime.
 
 ## Repository layout
 
-```
+```text
 taskpay/
 ├── src/
 │   ├── TaskPay.sol            # settlement contract (self-contained)
