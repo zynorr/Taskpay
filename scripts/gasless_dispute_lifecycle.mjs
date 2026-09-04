@@ -1,14 +1,17 @@
 // Live driver: full gasless DISPUTE lifecycle through the exact HTTP surface
-// the Next.js UI uses (POST /v1/quote → owner signs userOpHash → POST /v1/send).
-// Fresh EOAs act through their SimpleAccounts: createTask → acceptTask →
-// submitWork → raiseDispute → (oracle Groq agents rule) → resolveDispute →
-// challenge from the losing party → (oracle Senior Arbiter rules) → settlement.
-// Every TaskPay action is sponsored (0 gas for both users).
+// the gasless-only Next.js UI uses (POST /v1/quote → owner signs userOpHash →
+// POST /v1/send). Mirrors the create page's model: the requester funds their
+// TaskPay account EXTERNALLY from their own wallet on chain 968 (the app never
+// signs a funding transfer), the UI create gate (balance ≥ escrow) is checked,
+// and the spec is registered via the frontend's POST /api/specs/[taskId]. Then
+// createTask → acceptTask → submitWork → raiseDispute → (oracle Groq agents
+// rule) → resolveDispute → challenge from the losing party → (oracle Senior
+// Arbiter rules) → settlement. Every TaskPay action is sponsored (0 gas).
 //
 // Usage: node scripts/gasless_dispute_lifecycle.mjs
 // Requires: oracle bundler running (PORT=8787), frontend running (:3000) if
 // you want the UI verification section.
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 
@@ -97,12 +100,24 @@ console.log("requester smart:", requesterSmart, `(${((await provider.getCode(req
 console.log("agent smart:    ", agentSmart);
 
 const escrow = parseEther("0.01");
-await (await deployer.sendTransaction({ to: requesterSmart, value: escrow })).wait();
-console.log("pre-funded requester smart account with escrow:", formatEther(escrow), "tBOT");
+// External funding — exactly what the create page instructs: the user sends
+// escrow from their OWN wallet (EOA) to their TaskPay account on chain 968.
+// The app never signs this transfer; we emulate the user's wallet here.
+await (await requester.sendTransaction({ to: requesterSmart, value: escrow })).wait();
+const saBal = BigInt(await provider.getBalance(requesterSmart));
+console.log(
+  "[external funding] requester EOA → TaskPay account:",
+  formatEther(escrow),
+  "tBOT → account balance now",
+  formatEther(saBal),
+);
+// The create page only unlocks once the account holds ≥ escrow — same gate.
+if (saBal < escrow) throw new Error("TaskPay account underfunded — create must not unlock");
 
 // ---------------------------------------------------------------------------
-// 2. Spec + on-chain anchor. specHash = keccak(specText) so the archive row
-//    cross-checks against the on-chain anchor exactly like the frontend does.
+// 2. Spec text + on-chain anchor (specHash = keccak(specText), as the
+//    frontend computes it). Registered AFTER create via the frontend's
+//    POST /api/specs/[taskId] — the exact call the create page makes.
 // ---------------------------------------------------------------------------
 const taskId = Number(BigInt(await read("taskCount", [])));
 const specText =
@@ -110,25 +125,7 @@ const specText =
   "where N is read from argv. The script must run without errors on Python 3 and " +
   "include a small unit test (test_fib.py) asserting fib(10) == [0,1,1,2,3,5,8,13,21,34].";
 const specHash = keccak256(toUtf8Bytes(specText));
-
 const specFile = resolve(DATA_DIR, "specs", String(CHAIN_ID), `${taskId}.json`);
-mkdirSync(resolve(DATA_DIR, "specs", String(CHAIN_ID)), { recursive: true });
-writeFileSync(
-  specFile,
-  JSON.stringify(
-    {
-      chain_id: CHAIN_ID,
-      task_id: taskId,
-      spec_text: specText,
-      spec_hash: specHash,
-      created_at: new Date().toISOString(),
-    },
-    null,
-    2,
-  ),
-  "utf-8",
-);
-console.log(`\nspec registered → data/specs/${CHAIN_ID}/${taskId}.json (task #${taskId})`);
 
 // ---------------------------------------------------------------------------
 // 3. createTask (gasless, requester) — windows: accept/work/review 600s each
@@ -140,6 +137,15 @@ await gasless(
   escrow,
   "createTask",
 );
+
+// Spec auto-registration (the create page fires POST /api/specs after create).
+await fetch(`${FRONTEND}/api/specs/${taskId}`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ spec_text: specText, spec_hash: specHash }),
+});
+await waitFor(`spec archived for task #${taskId}`, () => existsSync(specFile), 15_000, 1_000);
+console.log(`spec auto-registered via frontend POST /api/specs/${taskId} → data/specs/${CHAIN_ID}/${taskId}.json`);
 
 // ---------------------------------------------------------------------------
 // 4. acceptTask + submitWork (gasless, agent) — deliverable is deliberately
