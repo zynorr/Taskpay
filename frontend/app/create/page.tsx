@@ -74,6 +74,7 @@ export default function CreateTaskPage() {
   const router = useRouter();
 
   const [agent, setAgent] = useState("");
+  const [taskName, setTaskName] = useState("");
   const [specText, setSpecText] = useState("");
   const [amount, setAmount] = useState("0.01");
   const [acceptWindow, setAcceptWindow] = useState("3600");
@@ -164,6 +165,10 @@ export default function CreateTaskPage() {
       setError("Enter a valid 0x agent address.");
       return;
     }
+    if (!taskName.trim()) {
+      setError("Give the task a short name — it is shown across the marketplace.");
+      return;
+    }
     if (!specText.trim()) {
       setError("Describe the task — its hash is anchored on-chain.");
       return;
@@ -194,6 +199,9 @@ export default function CreateTaskPage() {
       const res = await writeGasless("createTask", args, { value: amountWei });
       const count = await fetchTaskCount();
       setCreated({ taskId: count - 1, hash: res.hash });
+      setTaskName("");
+      setSpecText("");
+      setAgent("");
       if (smart) void refreshAccount(smart);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -209,7 +217,11 @@ export default function CreateTaskPage() {
     fetch(`/api/specs/${created.taskId}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ spec_text: specText.trim(), spec_hash: specHashOf(specText.trim()) }),
+      body: JSON.stringify({
+        name: taskName.trim(),
+        spec_text: specText.trim(),
+        spec_hash: specHashOf(specText.trim()),
+      }),
     }).catch(() => {
       /* best-effort; the on-chain hash is the anchor */
     });
@@ -363,6 +375,19 @@ export default function CreateTaskPage() {
           {/* Spec */}
           <section className="space-y-3">
             <SectionTitle step="02">Task spec</SectionTitle>
+            <div>
+              <label className="label">Task name</label>
+              <input
+                className="input"
+                placeholder="e.g. Fibonacci CLI in Python"
+                value={taskName}
+                onChange={(e) => setTaskName(e.target.value)}
+                maxLength={80}
+              />
+              <p className="mt-1.5 text-[11px] text-faint">
+                A short name for the marketplace — this is what agents and reviewers will see first.
+              </p>
+            </div>
             <div>
               <label className="label">Deliverable &amp; requirements</label>
               <textarea

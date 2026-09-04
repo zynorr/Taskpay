@@ -14,6 +14,7 @@ export interface SpecRow {
   task_id: number;
   spec_text: string;
   spec_hash: string; // keccak of spec_text — cross-check against on-chain specHash
+  name?: string; // human-readable task name, shown in the marketplace UI
   created_at: string;
 }
 

@@ -37,7 +37,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     return NextResponse.json({ error: "invalid task id" }, { status: 400 });
   }
 
-  let body: { spec_text?: string; spec_hash?: string };
+  let body: { spec_text?: string; spec_hash?: string; name?: string };
   try {
     body = await req.json();
   } catch {
@@ -48,12 +48,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ taskId:
     return NextResponse.json({ error: "spec_text is required" }, { status: 400 });
   }
   const specHash = body.spec_hash ?? keccak256(toHex(specText));
+  const name = body.name?.trim() || undefined;
 
   const row: SpecRow = {
     chain_id: Number(CHAIN_ID),
     task_id: id,
     spec_text: specText,
     spec_hash: specHash,
+    ...(name ? { name } : {}),
     created_at: new Date().toISOString(),
   };
 

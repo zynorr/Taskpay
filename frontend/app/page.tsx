@@ -6,7 +6,7 @@ import TaskCard from "@/components/TaskCard";
 import { ArrowRight, ShieldCheck, Refresh } from "@/components/icons";
 import { fetchAllTasks, fetchDispute, myIdentity } from "@/lib/tasks";
 import { Status } from "@/lib/contract";
-import type { TaskView, DisputeView } from "@/lib/types";
+import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
 import { formatAmount } from "@/lib/format";
 
 type Filter = "all" | "active" | "disputed" | "settled" | "mine";
@@ -32,6 +32,7 @@ function isTerminal(s: number) {
 export default function HomePage() {
   const [tasks, setTasks] = useState<TaskView[]>([]);
   const [disputes, setDisputes] = useState<Record<string, DisputeView>>({});
+  const [specs, setSpecs] = useState<Record<string, SpecSummary>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
@@ -45,18 +46,28 @@ export default function HomePage() {
       if (!aliveRef.current) return;
       setTasks(t);
 
-      const d: Record<string, DisputeView> = {};
-      for (const task of t) {
-        if (!isDisputed(task.status)) continue;
-        try {
-          const dispute = await fetchDispute(task.taskId);
-          if (dispute) d[task.taskId.toString()] = dispute;
-        } catch {
-          /* skip */
-        }
-      }
+      const [d, s] = await Promise.all([
+        (async () => {
+          const d: Record<string, DisputeView> = {};
+          for (const task of t) {
+            if (!isDisputed(task.status)) continue;
+            try {
+              const dispute = await fetchDispute(task.taskId);
+              if (dispute) d[task.taskId.toString()] = dispute;
+            } catch {
+              /* skip */
+            }
+          }
+          return d;
+        })(),
+        fetch(`/api/specs`)
+          .then((r) => (r.ok ? (r.json() as Promise<{ specs: Record<string, SpecSummary> }>) : null))
+          .then((j) => j?.specs ?? {})
+          .catch(() => ({}) as Record<string, SpecSummary>),
+      ]);
       if (aliveRef.current) {
         setDisputes(d);
+        setSpecs(s);
         setError(null);
       }
     } catch (e) {
@@ -259,6 +270,7 @@ export default function HomePage() {
                 key={t.taskId.toString()}
                 task={t}
                 dispute={disputes[t.taskId.toString()] ?? null}
+                spec={specs[t.taskId.toString()]}
                 isMine={
                   myAddrs.includes(t.requester.toLowerCase()) ||
                   myAddrs.includes(t.agent.toLowerCase())

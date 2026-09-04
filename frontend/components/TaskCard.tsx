@@ -3,9 +3,17 @@
 import Link from "next/link";
 import StatusBadge from "./StatusBadge";
 import { ArrowRight, Clock } from "./icons";
-import { shortAddress, formatAmount, timeLeft, deadlineUrgency, explorerAddress } from "@/lib/format";
+import {
+  shortAddress,
+  formatAmount,
+  timeLeft,
+  deadlineUrgency,
+  explorerAddress,
+  taskTitle,
+  taskSummary,
+} from "@/lib/format";
 import { Status } from "@/lib/contract";
-import type { TaskView, DisputeView } from "@/lib/types";
+import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
 
 const URGENCY: Record<string, string> = {
   ok: "text-mute",
@@ -17,11 +25,13 @@ const URGENCY: Record<string, string> = {
 export default function TaskCard({
   task,
   dispute,
+  spec,
   isMine,
   myAddrs,
 }: {
   task: TaskView;
   dispute?: DisputeView | null;
+  spec?: SpecSummary;
   isMine?: boolean;
   myAddrs?: string[];
 }) {
@@ -83,15 +93,28 @@ export default function TaskCard({
     <span className="text-xs font-medium text-faint">Cancelled by requester</span>
   ) : null;
 
+  const title = taskTitle(spec?.name, spec?.spec_text);
+  const summary = spec?.spec_text ? taskSummary(spec.spec_text) : null;
+
+  const deadlineLabel =
+    task.status === Status.Created
+      ? "Accept window"
+      : task.status === Status.Accepted
+        ? "Work deadline"
+        : task.status === Status.Submitted
+          ? "Review window"
+          : null;
+
   return (
     <Link href={`/task/${task.taskId}`} className="card-link group p-4 sm:p-5">
-      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
-        {/* Identity side */}
-        <div className="min-w-0 flex-1 space-y-3">
-          <div className="flex flex-wrap items-center gap-2.5">
-            <span className="font-mono text-sm font-semibold text-fg tnum">
+      {/* Top row: name + escrow */}
+      <div className="flex items-start justify-between gap-x-6">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs font-semibold text-faint tnum">
               #{task.taskId.toString().padStart(3, "0")}
             </span>
+            <StatusBadge status={task.status} pulse={disputePhase} />
             {isMine && role && (
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -103,37 +126,17 @@ export default function TaskCard({
                 Your task
               </span>
             )}
-            <StatusBadge status={task.status} pulse={disputePhase} />
           </div>
-
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
-            <a
-              href={explorerAddress(task.requester)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="font-mono text-mute transition hover:text-accent"
-              title="Requester"
-            >
-              {shortAddress(task.requester)}
-            </a>
-            <ArrowRight size={12} className="text-faint" />
-            <a
-              href={explorerAddress(task.agent)}
-              target="_blank"
-              rel="noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="font-mono text-mute transition hover:text-accent"
-              title="Agent"
-            >
-              {shortAddress(task.agent)}
-            </a>
-            {stateLine}
-          </div>
+          <h3 className="mt-1.5 truncate text-[15px] font-semibold tracking-tight text-fg group-hover:text-accent">
+            {title}
+          </h3>
+          {summary && (
+            <p className="mt-1 line-clamp-2 max-w-2xl text-[13px] leading-relaxed text-mute">
+              {summary}
+            </p>
+          )}
         </div>
-
-        {/* Numbers side */}
-        <div className="flex items-center justify-end gap-x-8 gap-y-2">
+        <div className="flex shrink-0 items-center justify-end gap-x-8">
           <div className="text-right">
             <div className="micro">Escrow</div>
             <div className="mt-0.5 text-[15px] font-semibold text-fg tnum">
@@ -141,31 +144,50 @@ export default function TaskCard({
               <span className="ml-1 text-xs font-normal text-mute">BOT</span>
             </div>
           </div>
-          {deadlineMeta && (
+          {deadlineMeta && deadlineLabel && (
             <div className="hidden text-right sm:block">
-              <div className="micro">
-                {task.status === Status.Created
-                  ? "Accept window"
-                  : task.status === Status.Accepted
-                    ? "Work deadline"
-                    : "Review window"}
-              </div>
+              <div className="micro">{deadlineLabel}</div>
               <div className="mt-0.5">{deadlineMeta}</div>
             </div>
           )}
         </div>
       </div>
 
+      {/* Bottom row: parties + state */}
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-lineSoft pt-3 text-xs">
+        <a
+          href={explorerAddress(task.requester)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-mute transition hover:text-accent"
+          title="Requester"
+        >
+          {shortAddress(task.requester)}
+        </a>
+        <ArrowRight size={12} className="text-faint" />
+        <a
+          href={explorerAddress(task.agent)}
+          target="_blank"
+          rel="noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className="font-mono text-mute transition hover:text-accent"
+          title="Agent"
+        >
+          {shortAddress(task.agent)}
+        </a>
+        {stateLine && (
+          <>
+            <span className="hidden h-3 w-px bg-line sm:block" />
+            {stateLine}
+          </>
+        )}
+      </div>
+
       {/* Mobile deadline */}
       {deadlineMeta && (
-        <div className="mt-3 flex items-center justify-between border-t border-lineSoft pt-3 sm:hidden">
-          <span className="micro">
-            {task.status === Status.Created
-              ? "Accept window"
-              : task.status === Status.Accepted
-                ? "Work deadline"
-                : "Review window"}
-          </span>
+        <div className="mt-2 flex items-center justify-between sm:hidden">
+          <span className="micro">{deadlineLabel ?? "Deadline"}</span>
           {deadlineMeta}
         </div>
       )}

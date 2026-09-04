@@ -94,6 +94,41 @@ export function explorerTx(hash: string): string {
   return `${base}/tx/${hash}`;
 }
 
+/**
+ * Display title + short summary for a task's spec. Uses the explicitly
+ * registered name when present; otherwise falls back to the first line of
+ * the spec text so legacy tasks (archived before names existed) still get a
+ * meaningful heading. `summary` is the trimmed remainder of the spec text.
+ */
+export function taskTitle(name: string | undefined, specText: string | null | undefined): string {
+  if (name?.trim()) return name.trim();
+  if (specText) {
+    const first = specText.split(/\r?\n/)[0]?.trim();
+    if (first) return first.length > 90 ? `${first.slice(0, 90).trimEnd()}…` : first;
+  }
+  return "Untitled task";
+}
+
+/**
+ * One-line summary of the spec text. For a spec stored as a single prose
+ * paragraph this returns null (the title is already that text); for specs
+ * written as a heading line + body it returns the body, trimmed and clamped.
+ */
+export function taskSummary(specText: string | null | undefined): string | null {
+  if (!specText) return null;
+  const lines = specText
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length < 2) return null;
+  const first = lines[0];
+  const rest = lines.slice(1).join(" ").trim();
+  // A single-paragraph spec is often stored as one long line — only treat it
+  // as heading+body when the remainder differs from the heading.
+  if (!rest || rest === first) return null;
+  return rest.length > 160 ? `${rest.slice(0, 160).trimEnd()}…` : rest;
+}
+
 /** True when a submission looks like a URL (for rendering a link). */
 export function looksLikeUrl(s: string): boolean {
   return /^https?:\/\/\S+$/.test(s.trim());

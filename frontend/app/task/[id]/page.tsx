@@ -31,6 +31,7 @@ import {
   deadlineUrgency,
   explorerAddress,
   copyText,
+  taskTitle,
 } from "@/lib/format";
 import type { TaskView, VerdictView, DisputeView, ReasoningRow, SpecRow } from "@/lib/types";
 
@@ -378,10 +379,14 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         >
           <ArrowLeft size={14} /> Marketplace
         </Link>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <h1 className="font-mono text-xl font-semibold tracking-tight text-fg tnum">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg">
+          {taskTitle(spec?.name, spec?.spec_text)}
+        </h1>
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+          <span className="font-mono text-sm font-semibold text-faint tnum">
             Task #{task.taskId.toString().padStart(3, "0")}
-          </h1>
+          </span>
+          <span className="h-3 w-px bg-line" />
           <StatusBadge status={task.status} pulse={disputed} />
         </div>
       </div>

@@ -41,5 +41,12 @@ export interface SpecRow {
   task_id: number;
   spec_text: string;
   spec_hash: string;
+  name?: string;
   created_at: string;
+}
+
+/** Market-facing slice of a registered spec (name + full text). */
+export interface SpecSummary {
+  name?: string;
+  spec_text: string;
 }
