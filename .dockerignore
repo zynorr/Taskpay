@@ -1,0 +1,22 @@
+# Secrets / local env — never copied into the image
+**/.env
+.env*
+!**/.env.example
+
+# Node / build artifacts (rebuilt inside the image)
+**/node_modules
+**/.next
+**/dist
+out/
+cache/
+broadcast/
+lib/
+
+# Data archives (lives on the mounted /data disk in deployment)
+data/
+
+# VCS / editor noise
+.git
+.gitignore
+*.log
+.DS_Store

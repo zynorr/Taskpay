@@ -1,0 +1,64 @@
+# Render blueprint for the TaskPay public testnet MVP.
+#
+# One web service runs BOTH the oracle (poller + sponsor bundler on an
+# internal port) and the Next.js frontend (public port 3000) behind a
+# persistent disk mounted at /data — Render mounts a disk to a single service,
+# so keeping both processes in one container is what lets them share the
+# archive (specs / reasoning / disputes) across redeploys.
+#
+# Deploy: Render dashboard → New → Blueprint → this repo. Fill the two
+# `sync: false` secrets (ORACLE_PRIVATE_KEY, GROQ_API_KEY) in the dashboard
+# after the service is created. See DEPLOY.md → "Public deployment (Render)".
+services:
+  - type: web
+    name: taskpay
+    runtime: docker
+    repo: https://github.com/zynorr/Taskpay.git
+    branch: main
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      # --- chain / sponsor stack (public constants) ---
+      - key: RPC_URL
+        value: https://rpc.bohr.life
+      - key: CHAIN_ID
+        value: "968"
+      - key: CONTRACT_ADDRESS
+        value: "0x7E159665DF732136dfA3E702d49874095fDf90c5"
+      - key: ENTRY_POINT
+        value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+      - key: AA_FACTORY
+        value: "0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b"
+      - key: PAYMASTER
+        value: "0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0"
+      - key: ORACLE_INTERNAL_URL
+        value: http://127.0.0.1:8787
+      # --- oracle cadence / sponsor protection ---
+      - key: POLL_INTERVAL_SECONDS
+        value: "10"
+      - key: ORACLE_BUNDLER_RATE_LIMIT
+        value: "20"
+      # --- secrets: fill in the Render dashboard ---
+      - key: ORACLE_PRIVATE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # --- frontend build/runtime (NEXT_PUBLIC_* are public by design) ---
+      - key: NEXT_PUBLIC_BUNDLER_URL
+        value: /api/bundler
+      - key: NEXT_PUBLIC_CHAIN_ID
+        value: "968"
+      - key: NEXT_PUBLIC_TASKPAY_CONTRACT
+        value: "0x7E159665DF732136dfA3E702d49874095fDf90c5"
+      - key: NEXT_PUBLIC_ENTRY_POINT
+        value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+      - key: NEXT_PUBLIC_AA_FACTORY
+        value: "0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b"
+      - key: NEXT_PUBLIC_PAYMASTER
+        value: "0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0"
