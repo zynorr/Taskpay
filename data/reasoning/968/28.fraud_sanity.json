@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 28,
+  "agent_role": "fraud_sanity",
+  "verdict": false,
+  "reasoning_text": "The agent's submission contains only a textual summary stating that fib.py and test_fib.py were written and are passing, but no actual code files, snippets, or repository link were provided. Without the source code or test contents, the reviewer cannot verify that the required functionality (printing the first N Fibonacci numbers from argv and a test asserting fib(10) == [0,1,1,2,3,5,8,13,21,34]) is implemented. This is a clear placeholder/fake submission that does not deliver the deliverable. Therefore the deliverable is rejected.",
+  "reasoning_hash": "0xbb75b2cbb2ff3402acd10b82fd7a573f7f0697cbf6193fc6928c9d0a3a54995c",
+  "created_at": "2026-09-04T12:00:35.499Z"
+}

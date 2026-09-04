@@ -1,0 +1,7 @@
+{
+  "chain_id": 968,
+  "task_id": 24,
+  "spec_text": "Write a Python script fib.py that prints the first N Fibonacci numbers (N from argv). Include test_fib.py asserting fib(10) == [0,1,1,2,3,5,8,13,21,34].",
+  "spec_hash": "0x9effcbb19a46a601119263bf70df40ed67781ec75c2c8a4b3d4cf7ab0f0c530f",
+  "created_at": "2026-09-04T11:41:35.957Z"
+}

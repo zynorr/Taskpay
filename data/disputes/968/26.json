@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 26,
+  "requester": "0xa30CAF6985EC73657138E0F02b5cc29D03408a24",
+  "reason": "Deliverable does not satisfy the spec: no repository link and no actual code were provided, so the work cannot be verified.",
+  "block_number": 22220763,
+  "transaction_hash": "0x9f0ac7209996227ee244283340b99f4d44cdf2b1f065aef13ad2da646feb6ccd",
+  "created_at": "2026-09-04T11:55:02.077Z"
+}

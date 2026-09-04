@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 24,
+  "agent_role": "fraud_sanity",
+  "verdict": false,
+  "reasoning_text": "The agent's response contains only a high‑level summary stating that fib.py and test_fib.py were written and are passing, but no actual code, file contents, or concrete evidence (e.g., snippets, file listings, or test output) is included. This is a classic placeholder/fake submission: the deliverable is claimed but not presented. Without the actual script and test file, the requester cannot verify that the required functionality (reading N from argv, printing the series, and providing a test asserting fib(10) == [0,1,1,2,3,5,8,13,21,34]) was implemented. Therefore the submission fails an obvious sanity check and appears to be fraudulent or incomplete.",
+  "reasoning_hash": "0xe65d84666e23e54dd2bf5bc2671369066137176557a24e7f76e5fecfb5155dc5",
+  "created_at": "2026-09-04T11:42:18.704Z"
+}

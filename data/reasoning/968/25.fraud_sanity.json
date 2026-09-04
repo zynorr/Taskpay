@@ -1,0 +1,9 @@
+{
+  "chain_id": 968,
+  "task_id": 25,
+  "agent_role": "fraud_sanity",
+  "verdict": false,
+  "reasoning_text": "The agent's submission contains no actual code or repository link—only a textual claim that fib.py and test_fib.py were written and pass. The task explicitly required a Python script implementing Fibonacci numbers and a test file with an assertion. Without the source files or any evidence (e.g., code snippets, file hashes, or a repository URL), there is no way to verify that the work was performed. This is a classic placeholder/fake submission, violating the requirement for concrete deliverables. Therefore the deliverable is rejected.",
+  "reasoning_hash": "0x29cbdd75fe79860c451b27a53d2532b3593a2cc6e86fd0dd69dcf7361878b7ed",
+  "created_at": "2026-09-04T11:52:51.786Z"
+}
