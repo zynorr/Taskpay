@@ -8,7 +8,18 @@ import type { TaskView, VerdictView, DisputeView } from "@/lib/types";
 
 const abi = TASKPAY_ABI;
 
-type WriteName = "createTask" | "acceptTask" | "submitWork" | "release" | "rateAgent" | "raiseDispute" | "challenge" | "resolveDispute" | "finalizeAfterChallenge";
+type WriteName =
+  | "createTask"
+  | "acceptTask"
+  | "submitWork"
+  | "release"
+  | "rateAgent"
+  | "raiseDispute"
+  | "challenge"
+  | "resolveDispute"
+  | "finalizeAfterChallenge"
+  | "cancelOpenTask"
+  | "reclaimAfterDeadline";
 
 export async function fetchTaskCount(): Promise<number> {
   const client = getPublicClient(config);

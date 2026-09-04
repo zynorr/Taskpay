@@ -192,6 +192,39 @@ export default function TaskActions({
         />
       )}
 
+      {/* Created: requester can back out anytime — cancel (window open) or
+          reclaim (window passed, agent can no longer accept) */}
+      {task.status === Status.Created && isRequester && bundlerOnline && (
+        <div className="space-y-2">
+          {now < task.acceptDeadline ? (
+            <>
+              <p className="text-[11px] text-slate-600">
+                The agent hasn&apos;t accepted yet. You can cancel anytime and the escrow is refunded
+                in full — no fee.
+              </p>
+              <ActionButton
+                tone="danger"
+                label="Cancel task & refund escrow"
+                busy={busy === "cancel"}
+                onClick={() => act("cancel", "cancelOpenTask", [task.taskId])}
+              />
+            </>
+          ) : (
+            <>
+              <p className="text-[11px] text-rose-300/80">
+                The accept window has passed — the agent can no longer accept. Reclaim the escrow.
+              </p>
+              <ActionButton
+                tone="danger"
+                label="Reclaim escrow"
+                busy={busy === "reclaim"}
+                onClick={() => act("reclaim", "reclaimAfterDeadline", [task.taskId])}
+              />
+            </>
+          )}
+        </div>
+      )}
+
       {/* Accepted: agent submits deliverable */}
       {task.status === Status.Accepted && isAgent && bundlerOnline && (
         <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">

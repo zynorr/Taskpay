@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseEther, formatEther } from "viem";
 import { useAccount } from "wagmi";
-import { writeGasless, specHashOf, myIdentity, fetchTaskCount } from "@/lib/tasks";
+import { writeGasless, specHashOf, myIdentity, fetchTaskCount, fetchAgentRating } from "@/lib/tasks";
 import { smartAccountOf, bundlerUrl } from "@/lib/aa";
 import {
   shortAddress,
@@ -333,7 +333,7 @@ export default function CreateTaskPage() {
               </p>
             )}
             {agentValid && (
-              <AgentSmartHint agent={agent.trim() as `0x${string}`} onUse={setAgent} />
+              <AgentCheck agent={agent.trim() as `0x${string}`} onUse={setAgent} />
             )}
             <p className="mt-1.5 text-[11px] text-slate-600">
               The agent acts gasless from its TaskPay account — if you only know the agent&apos;s
@@ -512,58 +512,163 @@ export default function CreateTaskPage() {
   );
 }
 
-/** Given an address, resolve whether it can act gasless on TaskPay: an address
- *  can only act through a sponsored UserOp if it IS the pasted agent's smart
- *  account (msg.sender = the account). A plain wallet (no code) is converted
- *  to its deterministic TaskPay account; a deployed address is left as-is. */
-function AgentSmartHint({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string) => void }) {
-  const [hint, setHint] = useState<null | { smart: string; hasCode: boolean }>(null);
+const OWNER_ABI = [
+  {
+    type: "function",
+    name: "owner",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+  },
+] as const;
+
+/** Soft pre-flight on the pasted agent address, before any escrow is locked:
+ *  - deployed address → read owner() to confirm it really is a TaskPay account
+ *    (and cross-check it against TaskPay's factory); a contract with no owner()
+ *    can never accept, so warn loudly
+ *  - plain wallet (no code) → show its deterministic TaskPay account, since
+ *    only that account can act with sponsored gas
+ *  - show the agent's on-chain rating summary for whoever is in the field */
+function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string) => void }) {
+  const [info, setInfo] = useState<null | {
+    smart: string;
+    hasCode: boolean;
+    owner: string | null;
+    fromFactory: boolean;
+  }>(null);
+  const [rating, setRating] = useState<{ totalScore: bigint; count: bigint } | null>(null);
+  const [ratingLoaded, setRatingLoaded] = useState(false);
+
   const load = useCallback(async () => {
     try {
-      const [sa, { getPublicClient }, { config }] = await Promise.all([
-        smartAccountOf(agent),
-        import("@wagmi/core"),
-        import("@/lib/wagmi"),
-      ]);
-      const code = await getPublicClient(config).getCode({ address: agent });
-      setHint({ smart: sa, hasCode: (code?.length ?? 0) > 0 });
+      const sa = await smartAccountOf(agent);
+      const { getPublicClient } = await import("@wagmi/core");
+      const { config } = await import("@/lib/wagmi");
+      const client = getPublicClient(config);
+      const code = await client.getCode({ address: agent });
+      const hasCode = (code?.length ?? 0) > 0;
+      let owner: string | null = null;
+      let fromFactory = false;
+      if (hasCode) {
+        try {
+          owner = (await client.readContract({
+            address: agent,
+            abi: OWNER_ABI,
+            functionName: "owner",
+          })) as string;
+          if (owner) {
+            fromFactory =
+              (await smartAccountOf(owner as `0x${string}`)).toLowerCase() === agent.toLowerCase();
+          }
+        } catch {
+          owner = null; // has code but no owner() → not a TaskPay account
+        }
+      }
+      setInfo({ smart: sa, hasCode, owner, fromFactory });
     } catch {
-      setHint(null);
+      setInfo(null);
     }
   }, [agent]);
+
   useEffect(() => {
     void load();
   }, [load]);
-  if (!hint) return null;
-  if (hint.smart.toLowerCase() === agent.toLowerCase()) {
-    return (
-      <p className="mt-1.5 text-[11px] text-emerald-400/80">
-        ✓ This is the agent&apos;s TaskPay account — it can act on the task gasless.
+
+  useEffect(() => {
+    let alive = true;
+    setRating(null);
+    setRatingLoaded(false);
+    fetchAgentRating(agent)
+      .then((r) => alive && setRating(r))
+      .catch(() => {
+        /* unreadable → no reputation shown */
+      })
+      .finally(() => alive && setRatingLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [agent]);
+
+  if (!info) return null;
+
+  let accountLine: React.ReactNode = null;
+  if (info.hasCode && info.owner === null) {
+    // code, no owner() → some random contract that can never act as an agent
+    accountLine = (
+      <div className="mt-2 rounded-lg border border-rose-900/60 bg-rose-950/30 px-3 py-2 text-[11px] text-rose-300">
+        This address has code but is <strong>not a TaskPay account</strong> (no owner()) — it can
+        never accept the task. Creating anyway locks the escrow until you cancel or reclaim.
+      </div>
+    );
+  } else if (info.hasCode && info.owner) {
+    // deployed account: show who owns it, ideally verified against TaskPay's factory
+    accountLine = (
+      <p className="mt-1.5 text-[11px]">
+        {info.fromFactory ? (
+          <span className="text-emerald-400/80">
+            ✓ Verified TaskPay account — owned by{" "}
+            <a
+              href={explorerAddress(info.owner)}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-emerald-300 underline-offset-2 hover:underline"
+            >
+              {shortAddress(info.owner)}
+            </a>
+            , derived from TaskPay&apos;s account factory
+          </span>
+        ) : (
+          <span className="text-amber-400/80">
+            Contract with an owner({" "}
+            <a
+              href={explorerAddress(info.owner)}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono text-amber-300 underline-offset-2 hover:underline"
+            >
+              {shortAddress(info.owner)}
+            </a>
+            ) but not TaskPay&apos;s standard account for that owner — confirm this is the account you
+            intend to hire.
+          </span>
+        )}
       </p>
     );
-  }
-  if (hint.hasCode) {
-    return (
-      <p className="mt-1.5 text-[11px] text-amber-400/80">
-        This address has on-chain code. Only the agent&apos;s TaskPay account can act with sponsored
-        gas — if this isn&apos;t it, paste the agent&apos;s wallet address instead.
-      </p>
+  } else {
+    // plain wallet (no code): acts on-chain as its deterministic TaskPay account
+    accountLine = (
+      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-brand-900/50 bg-brand-950/20 px-3 py-2 text-[11px] text-slate-400">
+        <span>
+          This is a plain wallet (no code) — it acts on TaskPay as its account{" "}
+          <span className="font-mono text-brand-200">{info.smart}</span>, deployed by its first
+          action. Paste the account address instead so the agent can act with sponsored gas.
+        </span>
+        <button
+          type="button"
+          onClick={() => onUse(info.smart)}
+          className="rounded-md bg-brand-700 px-2 py-1 font-medium text-white transition hover:bg-brand-600"
+        >
+          Use this account
+        </button>
+      </div>
     );
   }
+
+  const ratingLine =
+    ratingLoaded && rating && rating.count > 0n ? (
+      <p className="mt-1.5 text-[11px] text-slate-500">
+        <span className="text-amber-400">★</span>{" "}
+        {(Number(rating.totalScore) / Number(rating.count)).toFixed(1)}{" "}
+        <span className="text-slate-600">· {rating.count.toString()} on-chain rating{rating.count === 1n ? "" : "s"}</span>
+      </p>
+    ) : ratingLoaded ? (
+      <p className="mt-1 text-[11px] text-slate-600">no on-chain ratings yet — first task sets the record</p>
+    ) : null;
+
   return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-brand-900/50 bg-brand-950/20 px-3 py-2 text-[11px] text-slate-400">
-      <span>
-        This is a plain wallet (no code). It acts on TaskPay as its account{" "}
-        <span className="font-mono text-brand-200">{hint.smart}</span> — paste the account address
-        instead so the agent can accept and work with sponsored gas.
-      </span>
-      <button
-        type="button"
-        onClick={() => onUse(hint.smart)}
-        className="rounded-md bg-brand-700 px-2 py-1 font-medium text-white transition hover:bg-brand-600"
-      >
-        Use this account
-      </button>
-    </div>
+    <>
+      {accountLine}
+      {ratingLine}
+    </>
   );
 }
