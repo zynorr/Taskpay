@@ -77,24 +77,24 @@ anchored on-chain by its hash, so an archived row can always be verified against
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Created : createTask (escrow locked)
-    Created --> Accepted : acceptTask (agent only, before accept deadline)
-    Created --> Cancelled : cancelOpenTask (requester, anytime before accept)
-    Created --> Refunded : reclaimAfterDeadline (requester, accept window passed)
+    [*] --> Created : createTask · escrow locked
+    Created --> Accepted : acceptTask (agent)
+    Created --> Cancelled : cancelOpenTask (requester)
+    Created --> Refunded : reclaimAfterDeadline (requester)
     Accepted --> Submitted : submitWork
-    Accepted --> Refunded : refundExpiredTask (requester, work deadline passed)
+    Accepted --> Refunded : refundExpiredTask (requester)
     Submitted --> Released : release (requester)
-    Submitted --> Released : finalizeAfterReview (anyone, review window passed)
+    Submitted --> Released : finalizeAfterReview (anyone)
     Submitted --> Disputed : raiseDispute (requester)
-    Disputed --> PendingChallenge : resolveDispute (2-of-3 quorum → tentative outcome)
-    Disputed --> Refunded : refundAfterStalledDispute (no quorum before review lapse)
-    PendingChallenge --> Released : unchallenged → tentative outcome after window
+    Disputed --> PendingChallenge : resolveDispute (2-of-3 quorum)
+    Disputed --> Refunded : refundAfterStalledDispute
+    PendingChallenge --> Released : unchallenged → tentative holds
     PendingChallenge --> Challenged : challenge (losing party)
-    Challenged --> Released : Senior Arbiter verdict
-    Challenged --> Refunded : Senior Arbiter verdict / arbiter timeout → tentative
-    Released --> [*] : agent paid (fee only on this path)
-    Refunded --> [*] : escrow returned
-    Cancelled --> [*] : escrow returned
+    Challenged --> Released : arbiter verdict
+    Challenged --> Refunded : arbiter timeout → tentative
+    Released : agent paid (fee only on this path)
+    Refunded : escrow returned
+    Cancelled : escrow returned
 ```
 
 Every deadline transition is callable on-chain without the oracle — **the oracle is a
