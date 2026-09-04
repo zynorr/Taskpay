@@ -152,7 +152,8 @@ html.light {
   }
 
   .btn-secondary {
-    @apply btn border border-line bg-subtle text-fg hover:border-lineH hover:bg-subtleH;
+    @apply btn border border-lineH bg-well text-fg hover:border-lineH hover:bg-subtleH;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
   }
 
   .btn-danger {
