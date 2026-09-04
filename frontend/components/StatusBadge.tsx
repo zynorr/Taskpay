@@ -2,54 +2,58 @@
 
 import { STATUS_LABELS, Status } from "@/lib/contract";
 
-const STYLES: Record<number, { dot: string; pill: string }> = {
+const TONES: Record<number, { pill: string; dot: string }> = {
   [Status.Created]: {
-    dot: "bg-sky-400",
-    pill: "border-sky-800/50 bg-sky-950/40 text-sky-300",
+    pill: "text-zinc-400 border-white/10 bg-white/[0.03]",
+    dot: "bg-zinc-400",
   },
   [Status.Accepted]: {
-    dot: "bg-blue-400",
-    pill: "border-blue-800/50 bg-blue-950/40 text-blue-300",
+    pill: "text-sky-300 border-sky-500/25 bg-sky-500/10",
+    dot: "bg-sky-400",
   },
   [Status.Submitted]: {
-    dot: "bg-cyan-400",
-    pill: "border-cyan-800/50 bg-cyan-950/40 text-cyan-300",
+    pill: "text-violet-300 border-violet-500/25 bg-violet-500/10",
+    dot: "bg-violet-400",
   },
   [Status.Disputed]: {
+    pill: "text-amber-300 border-amber-500/25 bg-amber-500/10",
     dot: "bg-amber-400",
-    pill: "border-amber-800/50 bg-amber-950/40 text-amber-300",
   },
   [Status.PendingChallenge]: {
+    pill: "text-orange-300 border-orange-500/25 bg-orange-500/10",
     dot: "bg-orange-400",
-    pill: "border-orange-800/50 bg-orange-950/40 text-orange-300",
   },
   [Status.Challenged]: {
-    dot: "bg-violet-400",
-    pill: "border-violet-800/50 bg-violet-950/40 text-violet-300",
+    pill: "text-fuchsia-300 border-fuchsia-500/25 bg-fuchsia-500/10",
+    dot: "bg-fuchsia-400",
   },
   [Status.Released]: {
+    pill: "text-emerald-300 border-emerald-500/25 bg-emerald-500/10",
     dot: "bg-emerald-400",
-    pill: "border-emerald-800/50 bg-emerald-950/40 text-emerald-300",
   },
   [Status.Refunded]: {
+    pill: "text-rose-300 border-rose-500/25 bg-rose-500/10",
     dot: "bg-rose-400",
-    pill: "border-rose-800/50 bg-rose-950/40 text-rose-300",
   },
   [Status.Cancelled]: {
-    dot: "bg-slate-500",
-    pill: "border-slate-700 bg-slate-800/60 text-slate-400",
+    pill: "text-zinc-500 border-white/10 bg-white/[0.02]",
+    dot: "bg-zinc-500",
   },
 };
 
-export default function StatusBadge({ status, pulse }: { status: number; pulse?: boolean }) {
-  const s = STYLES[status] ?? STYLES[Status.Cancelled];
+export default function StatusBadge({
+  status,
+  pulse,
+}: {
+  status: number;
+  pulse?: boolean;
+}) {
+  const t = TONES[status] ?? TONES[Status.Cancelled];
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${s.pill}`}
+      className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${t.pill}`}
     >
-      <span
-        className={`h-1.5 w-1.5 rounded-full ${s.dot} ${pulse ? "animate-pulse-dot" : ""}`}
-      />
+      <span className={`h-1.5 w-1.5 rounded-full ${t.dot} ${pulse ? "animate-pulse-soft" : ""}`} />
       {STATUS_LABELS[status] ?? `Status ${status}`}
     </span>
   );

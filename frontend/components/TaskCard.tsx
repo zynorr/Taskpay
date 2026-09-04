@@ -2,21 +2,16 @@
 
 import Link from "next/link";
 import StatusBadge from "./StatusBadge";
-import {
-  shortAddress,
-  formatAmount,
-  timeLeft,
-  deadlineUrgency,
-  explorerAddress,
-} from "@/lib/format";
+import { ArrowRight, Clock } from "./icons";
+import { shortAddress, formatAmount, timeLeft, deadlineUrgency, explorerAddress } from "@/lib/format";
 import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView } from "@/lib/types";
 
-const URGENCY_TEXT: Record<string, string> = {
-  ok: "text-slate-400",
-  soon: "text-amber-300",
-  critical: "text-orange-300",
-  expired: "text-rose-400",
+const URGENCY: Record<string, { text: string; label: string }> = {
+  ok: { text: "text-zinc-300", label: "remaining" },
+  soon: { text: "text-amber-300", label: "remaining" },
+  critical: { text: "text-orange-300", label: "remaining" },
+  expired: { text: "text-rose-400", label: "elapsed" },
 };
 
 export default function TaskCard({
@@ -37,7 +32,6 @@ export default function TaskCard({
         ? "agent"
         : null;
 
-  // Which deadline governs the current state?
   const deadline =
     task.status === Status.Created
       ? task.acceptDeadline
@@ -48,131 +42,149 @@ export default function TaskCard({
           : null;
 
   const urgency = deadline ? deadlineUrgency(deadline) : null;
+  const disputePhase = task.status >= Status.Disputed && task.status <= Status.Challenged;
 
-  return (
-    <Link
-      href={`/task/${task.taskId}`}
-      className="card group block p-4 transition hover:border-brand-700/70 hover:shadow-glow sm:p-5"
-    >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5">
-          <span className="font-mono text-sm font-semibold text-slate-300">
-            #{task.taskId.toString()}
-          </span>
-          {isMine && role && (
-            <span
-              className={`chip ${
-                role === "requester"
-                  ? "border-brand-700/60 bg-brand-950/40 text-brand-300"
-                  : "border-cyan-800/60 bg-cyan-950/40 text-cyan-300"
-              }`}
-            >
-              your {role}
-            </span>
-          )}
-        </div>
-        <StatusBadge status={task.status} pulse={task.status >= Status.Disputed && task.status <= Status.Challenged} />
-      </div>
+  const deadlineMeta =
+    deadline && urgency ? (
+      <span className={`flex items-center gap-1.5 ${URGENCY[urgency].text}`}>
+        <Clock size={13} className="opacity-70" />
+        <span className="font-mono text-xs font-semibold tnum">{timeLeft(deadline)}</span>
+      </span>
+    ) : null;
 
-      <div className="grid grid-cols-2 items-center gap-x-4 gap-y-3 sm:grid-cols-[1.1fr_1.1fr_auto_auto]">
-        {/* Parties */}
-        <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600">
-            Requester
-          </div>
-          <a
-            href={explorerAddress(task.requester)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="font-mono text-xs text-slate-300 transition hover:text-brand-300"
-            title="View on explorer"
-          >
-            {shortAddress(task.requester)}
-          </a>
-        </div>
-        <div className="min-w-0">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600">
-            Agent
-          </div>
-          <a
-            href={explorerAddress(task.agent)}
-            target="_blank"
-            rel="noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="font-mono text-xs text-slate-300 transition hover:text-brand-300"
-            title="View on explorer"
-          >
-            {shortAddress(task.agent)}
-          </a>
-        </div>
-
-        {/* Escrow */}
-        <div className="text-right">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600">
-            Escrow
-          </div>
-          <div className="text-sm font-bold text-slate-100">
-            {formatAmount(task.amount)}{" "}
-            <span className="text-xs font-medium text-slate-500">BOT</span>
-          </div>
-        </div>
-
-        {/* Deadline / dispute state */}
-        <div className="text-right">
-          <div className="text-[10px] font-medium uppercase tracking-wide text-slate-600">
-            {task.status === Status.Created
-              ? "Accept by"
-              : task.status === Status.Accepted
-                ? "Work due"
-                : task.status === Status.Submitted
-                  ? "Review by"
-                  : task.status >= Status.Disputed && task.status <= Status.Challenged
-                    ? "Dispute"
-                    : "State"}
-          </div>
-          {deadline && urgency ? (
-            <div className={`font-mono text-xs font-semibold ${URGENCY_TEXT[urgency]}`}>
-              {timeLeft(deadline)}
-            </div>
-          ) : task.status === Status.Disputed || task.status === Status.PendingChallenge ? (
-            <div className="font-mono text-xs font-semibold text-amber-300">
-              {dispute?.hasChallenged
-                ? "at Senior Arbiter"
-                : "awaiting AI ruling"}
-            </div>
-          ) : task.status === Status.Challenged ? (
-            <div className="font-mono text-xs font-semibold text-violet-300">arbiter ruling…</div>
-          ) : task.status === Status.Released ? (
-            <div className="font-mono text-xs font-semibold text-emerald-300">paid ✓</div>
-          ) : task.status === Status.Refunded ? (
-            <div className="font-mono text-xs font-semibold text-rose-300">refunded</div>
-          ) : (
-            <div className="font-mono text-xs text-slate-600">—</div>
-          )}
-        </div>
-      </div>
-
-      {/* Dispute hint bar */}
-      {task.status >= Status.Disputed && task.status <= Status.Challenged && dispute && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-800 pt-3 text-[11px] text-slate-500">
+  const stateLine = disputePhase ? (
+    <span className="flex items-center gap-2 text-xs">
+      {dispute ? (
+        <>
           <span
-            className={`rounded-md px-1.5 py-0.5 font-semibold ${
-              dispute.tentativeApproved
-                ? "bg-emerald-950/60 text-emerald-300"
-                : "bg-rose-950/60 text-rose-300"
+            className={`font-medium ${
+              dispute.tentativeApproved ? "text-emerald-300" : "text-rose-300"
             }`}
           >
-            tentative: {dispute.tentativeApproved ? "APPROVE agent" : "REFUND requester"}
+            {dispute.tentativeApproved ? "Tentative: pay agent" : "Tentative: refund"}
           </span>
           {!dispute.hasChallenged && task.status === Status.PendingChallenge && (
-            <span>
+            <span className="text-zinc-500">
               challenge window{" "}
-              <span className="font-mono text-amber-300">
+              <span className="font-mono text-amber-300 tnum">
                 {timeLeft(dispute.challengeDeadline)}
               </span>
             </span>
           )}
+          {dispute.hasChallenged && (
+            <span className="text-fuchsia-300">Senior Arbiter reviewing</span>
+          )}
+        </>
+      ) : (
+        <span className="text-amber-300">AI quorum ruling</span>
+      )}
+    </span>
+  ) : task.status === Status.Released ? (
+    <span className="text-xs font-medium text-emerald-300">Escrow paid to agent</span>
+  ) : task.status === Status.Refunded ? (
+    <span className="text-xs font-medium text-rose-300">Escrow refunded</span>
+  ) : task.status === Status.Cancelled ? (
+    <span className="text-xs font-medium text-zinc-500">Cancelled by requester</span>
+  ) : null;
+
+  return (
+    <Link
+      href={`/task/${task.taskId}`}
+      className="card-link group p-4 sm:p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-4">
+        {/* Identity side */}
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="font-mono text-sm font-semibold text-zinc-200 tnum">
+              #{task.taskId.toString().padStart(3, "0")}
+            </span>
+            {isMine && role && (
+              <span
+                className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                  role === "requester"
+                    ? "border-iris-500/30 bg-iris-500/10 text-iris-300"
+                    : "border-sky-500/30 bg-sky-500/10 text-sky-300"
+                }`}
+              >
+                Your task
+              </span>
+            )}
+            <StatusBadge status={task.status} pulse={disputePhase} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs">
+            <a
+              href={explorerAddress(task.requester)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="font-mono text-zinc-400 transition hover:text-iris-300"
+              title="Requester"
+            >
+              {shortAddress(task.requester)}
+            </a>
+            <ArrowRight size={12} className="text-zinc-700" />
+            <a
+              href={explorerAddress(task.agent)}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              className="font-mono text-zinc-400 transition hover:text-iris-300"
+              title="Agent"
+            >
+              {shortAddress(task.agent)}
+            </a>
+            {stateLine}
+          </div>
+        </div>
+
+        {/* Numbers side */}
+        <div className="flex items-center justify-end gap-x-8 gap-y-2">
+          <div className="text-right">
+            <div className="micro">Escrow</div>
+            <div className="mt-0.5 text-[15px] font-semibold text-zinc-100 tnum">
+              {formatAmount(task.amount)}
+              <span className="ml-1 text-xs font-normal text-zinc-500">BOT</span>
+            </div>
+          </div>
+          {deadlineMeta && (
+            <div className="hidden text-right sm:block">
+              <div className="micro">
+                {task.status === Status.Created
+                  ? "Accept window"
+                  : task.status === Status.Accepted
+                    ? "Work deadline"
+                    : "Review window"}
+              </div>
+              <div className="mt-0.5">{deadlineMeta}</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Mobile deadline */}
+      {deadlineMeta && (
+        <div className="mt-3 flex items-center justify-between border-t border-white/[0.05] pt-3 sm:hidden">
+          <span className="micro">
+            {task.status === Status.Created
+              ? "Accept window"
+              : task.status === Status.Accepted
+                ? "Work deadline"
+                : "Review window"}
+          </span>
+          {deadlineMeta}
+        </div>
+      )}
+
+      {/* Escrow-at-risk hint when a deadline lapses (short window) */}
+      {urgency === "expired" && deadline && (
+        <div className="mt-2 text-[11px] text-zinc-600">
+          {task.status === Status.Created
+            ? "Accept window elapsed — the requester can reclaim the escrow."
+            : task.status === Status.Accepted
+              ? "Work deadline elapsed — the requester can refund the escrow."
+              : "Review window elapsed — the escrow can be paid out."}
         </div>
       )}
     </Link>

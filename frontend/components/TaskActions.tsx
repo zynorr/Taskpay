@@ -7,6 +7,7 @@ import { writeGasless, myIdentity } from "@/lib/tasks";
 import { bundlerUrl } from "@/lib/aa";
 import { Status } from "@/lib/contract";
 import { shortAddress, explorerTx, looksLikeUrl } from "@/lib/format";
+import { AlertTriangle, ArrowUpRight, Bolt, Check } from "./icons";
 import type { TaskView, DisputeView } from "@/lib/types";
 
 function ActionButton({
@@ -22,36 +23,38 @@ function ActionButton({
   disabled?: boolean;
   tone?: "default" | "danger" | "success";
 }) {
-  const toneCls =
-    tone === "danger"
-      ? "bg-rose-700 hover:bg-rose-600"
-      : tone === "success"
-        ? "bg-emerald-700 hover:bg-emerald-600"
-        : "bg-slate-700 hover:bg-slate-600";
+  const cls =
+    tone === "danger" ? "btn-danger" : tone === "success" ? "btn-success" : "btn-secondary";
   return (
-    <button
-      onClick={onClick}
-      disabled={busy || disabled}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium text-white transition disabled:cursor-not-allowed disabled:opacity-40 ${toneCls}`}
-    >
-      {busy && (
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-      )}
+    <button onClick={onClick} disabled={busy || disabled} className={cls}>
+      {busy && <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current/25 border-t-current" />}
       {busy ? "Confirming…" : label}
       {!busy && (
-        <span className="rounded bg-black/25 px-1.5 py-0.5 text-[10px] font-bold text-emerald-200">
-          ⚡ gasless
+        <span className="inline-flex items-center gap-1 rounded bg-black/20 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+          <Bolt size={9} /> 0 gas
         </span>
       )}
     </button>
   );
 }
 
-function CopyHash({ hash }: { hash: string }) {
+function ConfirmedTx({ label, hash }: { label: string; hash: string }) {
   return (
-    <span className="font-mono text-[11px] text-slate-500">
-      {hash.slice(0, 10)}…{hash.slice(-6)}
-    </span>
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3.5 py-2.5 text-sm text-emerald-100">
+      <Check size={15} className="text-emerald-400" />
+      <span className="font-medium">{label} confirmed</span>
+      <span className="font-mono text-xs text-zinc-500">
+        {hash.slice(0, 10)}…{hash.slice(-6)}
+      </span>
+      <a
+        href={explorerTx(hash)}
+        target="_blank"
+        rel="noreferrer"
+        className="ml-auto inline-flex items-center gap-1 text-xs text-emerald-300 hover:underline"
+      >
+        View transaction <ArrowUpRight size={12} />
+      </a>
+    </div>
   );
 }
 
@@ -69,13 +72,11 @@ export default function TaskActions({
   const [error, setError] = useState<string | null>(null);
   const [smart, setSmart] = useState<string | null>(null);
 
-  // Form inputs for multi-field actions
   const [submitText, setSubmitText] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
   const [challengeReason, setChallengeReason] = useState("");
   const [rating, setRating] = useState(5);
 
-  // Last confirmed action → explorer link
   const [confirmed, setConfirmed] = useState<{ label: string; hash: string } | null>(null);
 
   const bundlerOnline = Boolean(bundlerUrl());
@@ -96,9 +97,9 @@ export default function TaskActions({
 
   if (!isConnected || !address) {
     return (
-      <div className="rounded-xl border border-dashed border-slate-700 bg-slate-950/40 p-5 text-center text-sm text-slate-500">
-        Connect your wallet to take actions on this task.
-      </div>
+      <p className="rounded-lg border border-dashed border-white/10 px-4 py-5 text-center text-[13px] text-zinc-600">
+        Connect your wallet to act on this task. You will only be asked to sign.
+      </p>
     );
   }
 
@@ -107,21 +108,21 @@ export default function TaskActions({
   const requester = task.requester.toLowerCase();
   const agent = task.agent.toLowerCase();
 
-  // Gasless-only: an action is only possible when the on-chain role IS the
-  // connected wallet's TaskPay account (sponsored UserOps run as that account).
   const isRequester = requester === meSmart;
   const isAgent = agent === meSmart;
-
-  // Legacy tasks may name the raw wallet instead of its TaskPay account —
-  // those roles can no longer be acted on from the gasless-only app.
   const legacyBlocked =
     meSmart !== null && !isRequester && !isAgent && (requester === me || agent === me);
 
-  function act(name: string, fnName: Parameters<typeof writeGasless>[0], args: unknown[], opts?: { value?: bigint }) {
+  function act(
+    name: string,
+    fnName: Parameters<typeof writeGasless>[0],
+    args: unknown[],
+    _opts?: { value?: bigint },
+  ) {
     setBusy(name);
     setError(null);
     setConfirmed(null);
-    writeGasless(fnName, args, opts)
+    writeGasless(fnName, args)
       .then((res) => {
         setConfirmed({ label: name, hash: res.hash });
         onSettled();
@@ -138,51 +139,32 @@ export default function TaskActions({
   const canChallenge = challenger !== null && (challenger === "requester" ? isRequester : isAgent);
 
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const inputCls = "input !py-1.5 text-xs";
+  const inputCls = "input !py-1.5 text-[13px]";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5">
       {!bundlerOnline && (
-        <div className="rounded-xl border border-amber-900/60 bg-amber-950/30 p-3 text-sm text-amber-300">
-          The sponsor bundler is offline — actions are unavailable until the oracle is running.
+        <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/25 bg-amber-500/[0.06] px-3.5 py-2.5 text-[13px] text-amber-200">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>The sponsor bundler is offline — actions resume when the oracle is running.</span>
         </div>
       )}
       {legacyBlocked && (
-        <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-3 text-xs text-slate-500">
-          This task was created with your wallet address directly as the{" "}
-          {requester === me ? "requester" : "agent"}, not your TaskPay account. TaskPay is
-          gasless-only now, so this legacy task can&apos;t be acted on from the app — new tasks bind
-          the TaskPay account and work fully gasless.
-        </div>
-      )}
-      {error && (
-        <div className="rounded-xl border border-rose-900 bg-rose-950/40 p-3 text-sm text-rose-300">
-          {error}
-        </div>
-      )}
-      {confirmed && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-emerald-900 bg-emerald-950/40 p-3 text-sm text-emerald-300">
-          <span>✓ {confirmed.label} confirmed</span>
-          <CopyHash hash={confirmed.hash} />
-          <a
-            href={explorerTx(confirmed.hash)}
-            target="_blank"
-            rel="noreferrer"
-            className="text-emerald-200 underline-offset-2 hover:underline"
-          >
-            view on explorer ↗
-          </a>
-        </div>
-      )}
-
-      {!bundlerOnline && (
-        <p className="text-[11px] text-slate-600">
-          Connected as <span className="font-mono">{shortAddress(smart ?? address)}</span> — no
-          wallet transaction is ever broadcast; actions are sponsored UserOps.
+        <p className="rounded-lg border border-white/10 bg-white/[0.02] px-3.5 py-2.5 text-[13px] leading-relaxed text-zinc-500">
+          This task binds your wallet address directly (as {requester === me ? "requester" : "agent"})
+          rather than your TaskPay account. TaskPay is gasless-only now, so this earlier task
+          can&apos;t be acted on from the app — new tasks bind accounts and work fully gasless.
         </p>
       )}
+      {error && (
+        <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/25 bg-rose-500/[0.06] px-3.5 py-2.5 text-[13px] text-rose-200">
+          <AlertTriangle size={15} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
+        </div>
+      )}
+      {confirmed && <ConfirmedTx label={confirmed.label} hash={confirmed.hash} />}
 
-      {/* Created: designated agent accepts */}
+      {/* Created: agent accepts */}
       {task.status === Status.Created && isAgent && bundlerOnline && (
         <ActionButton
           tone="success"
@@ -192,27 +174,25 @@ export default function TaskActions({
         />
       )}
 
-      {/* Created: requester can back out anytime — cancel (window open) or
-          reclaim (window passed, agent can no longer accept) */}
+      {/* Created: requester can back out */}
       {task.status === Status.Created && isRequester && bundlerOnline && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {now < task.acceptDeadline ? (
             <>
-              <p className="text-[11px] text-slate-600">
-                The agent hasn&apos;t accepted yet. You can cancel anytime and the escrow is refunded
-                in full — no fee.
+              <p className="text-[13px] text-zinc-500">
+                The agent hasn&apos;t accepted yet. Cancel anytime — the escrow is refunded in full.
               </p>
               <ActionButton
                 tone="danger"
-                label="Cancel task & refund escrow"
+                label="Cancel task and refund escrow"
                 busy={busy === "cancel"}
                 onClick={() => act("cancel", "cancelOpenTask", [task.taskId])}
               />
             </>
           ) : (
             <>
-              <p className="text-[11px] text-rose-300/80">
-                The accept window has passed — the agent can no longer accept. Reclaim the escrow.
+              <p className="text-[13px] text-rose-300/90">
+                The accept window has closed — the agent can no longer accept. Reclaim the escrow.
               </p>
               <ActionButton
                 tone="danger"
@@ -225,25 +205,26 @@ export default function TaskActions({
         </div>
       )}
 
-      {/* Accepted: agent submits deliverable */}
+      {/* Accepted: agent submits */}
       {task.status === Status.Accepted && isAgent && bundlerOnline && (
-        <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-          <label className="block text-xs font-medium text-slate-400">
-            Deliverable <span className="text-slate-600">(repo URL, commit SHA, or text)</span>
-          </label>
-          <textarea
-            rows={2}
-            className={inputCls}
-            placeholder="https://github.com/you/repo @ <commit-sha>"
-            value={submitText}
-            onChange={(e) => setSubmitText(e.target.value)}
-          />
-          {submitText.trim() && !looksLikeUrl(submitText.trim()) && (
-            <p className="text-[11px] text-amber-400/80">
-              Tip: include a link — the AI reviewer fetches it during disputes.
-            </p>
-          )}
+        <div className="space-y-2.5">
+          <div>
+            <label className="label">Deliverable</label>
+            <textarea
+              rows={3}
+              className={inputCls}
+              placeholder="Repo URL + commit, artifact link, or a summary of what was shipped"
+              value={submitText}
+              onChange={(e) => setSubmitText(e.target.value)}
+            />
+            {submitText.trim() && !looksLikeUrl(submitText.trim()) && (
+              <p className="mt-1 text-[11px] text-amber-300/80">
+                Tip: include a link — the AI reviewer fetches it during disputes.
+              </p>
+            )}
+          </div>
           <ActionButton
+            tone="success"
             label="Submit deliverable"
             busy={busy === "submit"}
             disabled={!submitText.trim()}
@@ -254,24 +235,25 @@ export default function TaskActions({
 
       {/* Submitted: requester releases or disputes */}
       {task.status === Status.Submitted && isRequester && bundlerOnline && (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <ActionButton
             tone="success"
-            label="Release payment"
+            label="Release payment to agent"
             busy={busy === "release"}
             onClick={() => act("release", "release", [task.taskId])}
           />
-          <div className="space-y-2 rounded-xl border border-rose-900/40 bg-rose-950/20 p-3">
-            <label className="block text-xs font-medium text-rose-300">
-              Not satisfied? Raise a dispute <span className="font-normal text-rose-400/70">(AI quorum rules)</span>
-            </label>
+          <div className="rounded-lg border border-rose-500/20 bg-rose-500/[0.03] p-3.5">
+            <label className="label !text-rose-300/80">Not satisfied? Raise a dispute</label>
             <textarea
-              rows={2}
-              className={`${inputCls} border-rose-900/50 focus:border-rose-500`}
-              placeholder="What's wrong with the deliverable? e.g. no code shipped, missed requirements…"
+              rows={3}
+              className={`${inputCls} !border-rose-500/30`}
+              placeholder="What is wrong with the deliverable — e.g. nothing shipped, requirements missed"
               value={disputeReason}
               onChange={(e) => setDisputeReason(e.target.value)}
             />
+            <p className="mt-1.5 mb-2 text-[11px] leading-relaxed text-zinc-600">
+              Your reason is hashed on-chain; the AI quorum rules on the full deliverable.
+            </p>
             <ActionButton
               tone="danger"
               label="Raise dispute"
@@ -283,55 +265,55 @@ export default function TaskActions({
         </div>
       )}
 
-      {/* Disputed: anyone resolves once 2-of-3 exists */}
+      {/* Disputed: anyone can apply a 2-of-3 verdict */}
       {task.status === Status.Disputed && bundlerOnline && (
         <div>
           <ActionButton
-            label="Resolve dispute (apply 2-of-3 verdict)"
+            label="Apply quorum verdict"
             busy={busy === "resolve"}
             onClick={() => act("resolve", "resolveDispute", [task.taskId])}
           />
-          <p className="mt-1.5 text-[11px] text-slate-600">
-            Once two AI agents agree, anyone can apply the ruling on-chain — sponsored, 0 gas.
+          <p className="mt-1.5 text-[11px] text-zinc-600">
+            Once two AI agents agree, anyone can apply the ruling on-chain — sponsored.
           </p>
         </div>
       )}
 
-      {/* PendingChallenge: losing party challenges within the window */}
+      {/* PendingChallenge */}
       {task.status === Status.PendingChallenge && dispute && bundlerOnline && (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           {now > dispute.challengeDeadline && (
             <ActionButton
               tone="success"
-              label="Finalize (challenge window passed)"
+              label="Finalize — challenge window passed"
               busy={busy === "finalize"}
               onClick={() => act("finalize", "finalizeAfterChallenge", [task.taskId])}
             />
           )}
           {canChallenge && now <= dispute.challengeDeadline && (
-            <div className="space-y-2 rounded-xl border border-violet-900/40 bg-violet-950/20 p-3">
-              <label className="block text-xs font-medium text-violet-300">
-                You lost the quorum ruling — appeal to the Senior Arbiter
-              </label>
+            <div className="rounded-lg border border-fuchsia-500/20 bg-fuchsia-500/[0.03] p-3.5">
+              <label className="label !text-fuchsia-300/80">Appeal to the Senior Arbiter</label>
               <textarea
-                rows={2}
-                className={`${inputCls} border-violet-900/50 focus:border-violet-500`}
-                placeholder="Why should the Senior Arbiter overturn the quorum?"
+                rows={3}
+                className={`${inputCls} !border-fuchsia-500/30`}
+                placeholder="Why should the Senior Arbiter overturn the quorum ruling?"
                 value={challengeReason}
                 onChange={(e) => setChallengeReason(e.target.value)}
               />
-              <ActionButton
-                tone="danger"
-                label="Challenge to Senior Arbiter"
-                busy={busy === "challenge"}
-                disabled={!challengeReason.trim()}
-                onClick={() =>
-                  act("challenge", "challenge", [
-                    task.taskId,
-                    keccak256(toHex(challengeReason.trim())),
-                  ])
-                }
-              />
+              <div className="mt-2.5">
+                <ActionButton
+                  tone="danger"
+                  label="Challenge the ruling"
+                  busy={busy === "challenge"}
+                  disabled={!challengeReason.trim()}
+                  onClick={() =>
+                    act("challenge", "challenge", [
+                      task.taskId,
+                      keccak256(toHex(challengeReason.trim())),
+                    ])
+                  }
+                />
+              </div>
             </div>
           )}
         </div>
@@ -339,30 +321,45 @@ export default function TaskActions({
 
       {/* Released: requester rates the agent */}
       {task.status === Status.Released && isRequester && bundlerOnline && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 p-3">
-          <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-3.5 rounded-lg border border-white/[0.06] bg-ink-900/50 px-4 py-3">
+          <div className="flex items-center gap-0.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
                 onClick={() => setRating(n)}
                 disabled={busy === "rate"}
-                aria-label={`Rate ${n} star${n === 1 ? "" : "s"}`}
-                className={`text-xl transition hover:scale-110 disabled:opacity-50 ${
-                  n <= rating ? "text-amber-400" : "text-slate-700 hover:text-slate-500"
+                aria-label={`${n} star${n === 1 ? "" : "s"}`}
+                className={`transition hover:scale-110 disabled:opacity-50 ${
+                  n <= rating ? "text-amber-400" : "text-zinc-700 hover:text-zinc-500"
                 }`}
               >
-                ★
+                <StarFilled />
               </button>
             ))}
           </div>
-          <span className="text-xs text-slate-500">Rate the agent</span>
+          <span className="text-[13px] text-zinc-500">Rate the agent</span>
           <ActionButton
-            label={`Submit ${rating}★`}
+            label={`Submit ${rating} of 5`}
             busy={busy === "rate"}
             onClick={() => act("rate", "rateAgent", [task.taskId, rating])}
           />
         </div>
       )}
+
+      {bundlerOnline && smart && (
+        <p className="text-[11px] text-zinc-600">
+          Acting as <span className="font-mono">{shortAddress(smart)}</span> — no wallet
+          transaction is broadcast; actions are sponsored UserOps you only sign.
+        </p>
+      )}
     </div>
+  );
+}
+
+function StarFilled() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <path d="M12 2.8 14.9 8.6l6.4.9-4.6 4.5 1.1 6.3L12 17.4l-5.7 3 1.1-6.3L2.7 9.5l6.4-.9L12 2.8Z" />
+    </svg>
   );
 }

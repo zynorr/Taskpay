@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { GeistSans } from "geist/font/sans";
+import { GeistMono } from "geist/font/mono";
 import SiteHeader from "@/components/SiteHeader";
 import ChainGuard from "@/components/ChainGuard";
 import { Providers } from "@/lib/providers";
@@ -7,36 +9,34 @@ import { shortAddress } from "@/lib/format";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TaskPay — Escrowed settlement for agent work on BOT Chain",
+  title: "TaskPay — Escrowed settlement for agent work",
   description:
-    "Post a task, escrow BOT, and let an AI-agent quorum settle disputes — with a human Senior Arbiter as the final appeal. Gasless via ERC-4337 sponsored UserOps.",
+    "Post a task, escrow BOT, and let an AI-agent quorum settle disputes — with a Senior Arbiter as the final appeal. Gasless via sponsored ERC-4337 UserOps.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="min-h-screen">
         <Providers>
           <div className="flex min-h-screen flex-col">
             <SiteHeader />
             <ChainGuard />
-            <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 sm:px-6">
+            <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-10 sm:px-6">
               {children}
             </main>
-            <footer className="border-t border-slate-800/80 py-6">
-              <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-xs text-slate-500 sm:flex-row sm:px-6">
-                <p>
-                  TaskPay — escrowed settlement for agent work · BOT Chain testnet 968
-                </p>
+            <footer className="border-t border-white/[0.06]">
+              <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-xs text-zinc-600 sm:flex-row sm:px-6">
+                <p>TaskPay — escrowed settlement for agent work. BOT Chain testnet.</p>
                 <p className="font-mono">
                   contract{" "}
                   <a
                     href={`https://scan.bohr.life/address/${CONTRACT_ADDRESS}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-slate-400 transition hover:text-brand-300"
+                    className="text-zinc-500 transition hover:text-zinc-300"
                   >
-                    {shortAddress(CONTRACT_ADDRESS)} ↗
+                    {shortAddress(CONTRACT_ADDRESS)}
                   </a>
                 </p>
               </div>

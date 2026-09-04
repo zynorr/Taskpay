@@ -3,77 +3,109 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    color-scheme: dark;
+  }
+
   body {
-    @apply bg-slate-950 text-slate-100 antialiased;
-    background-image: radial-gradient(
-        60rem 40rem at 85% -10%,
-        rgba(79, 70, 229, 0.12),
-        transparent
-      ),
-      radial-gradient(
-        50rem 35rem at -10% 0%,
-        rgba(20, 184, 166, 0.07),
-        transparent
-      );
+    @apply bg-ink-950 font-sans text-zinc-200 antialiased;
+    background-image:
+      radial-gradient(56rem 32rem at 82% -12%, rgba(107, 78, 255, 0.09), transparent 60%),
+      radial-gradient(44rem 28rem at -8% 4%, rgba(56, 189, 248, 0.05), transparent 60%);
     background-attachment: fixed;
   }
 
   ::selection {
-    @apply bg-brand-600/50 text-white;
+    @apply bg-iris-600/40 text-white;
   }
 
   *:focus-visible {
-    @apply outline-none ring-2 ring-brand-500/60 ring-offset-2 ring-offset-slate-950;
+    @apply outline-none ring-2 ring-iris-500/50 ring-offset-2 ring-offset-ink-950;
+  }
+
+  /* Numeric columns align quietly. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
   }
 }
 
-@layer utilities {
-  /* Frosted surface used for headers, cards and panels. */
-  .glass {
-    @apply border border-slate-800/80 bg-slate-900/70 backdrop-blur;
+@layer components {
+  /* --- Text helpers ------------------------------------------------------ */
+  .micro {
+    @apply text-[11px] font-medium uppercase tracking-[0.09em] text-zinc-500;
   }
 
-  /* Primary CTA. */
+  /* --- Surfaces ---------------------------------------------------------- */
+  .panel {
+    @apply rounded-xl border border-white/[0.07] bg-zinc-900/50 shadow-panel;
+  }
+
+  .panel-strong {
+    @apply rounded-xl border border-white/[0.08] bg-zinc-900/80 shadow-panel;
+  }
+
+  .card-link {
+    @apply panel block transition hover:border-white/[0.14] hover:bg-zinc-900/70;
+  }
+
+  /* --- Buttons ----------------------------------------------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-sm font-medium transition select-none active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-40;
+  }
+
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-500 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+    @apply btn bg-iris-600 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset] hover:bg-iris-500;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:bg-slate-700/60 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40;
+    @apply btn border border-white/10 bg-white/[0.03] text-zinc-200 hover:border-white/20 hover:bg-white/[0.06];
   }
 
+  .btn-danger {
+    @apply btn border border-rose-500/30 bg-rose-500/10 text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20;
+  }
+
+  .btn-success {
+    @apply btn border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20;
+  }
+
+  .btn-sm {
+    @apply px-2.5 py-1.5 text-xs;
+  }
+
+  /* --- Forms ------------------------------------------------------------- */
   .input {
-    @apply w-full rounded-lg border border-slate-700/80 bg-slate-950/80 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 transition focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500/50;
+    @apply w-full rounded-lg border border-white/10 bg-ink-900/80 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-600 transition focus:border-iris-500/70 focus:outline-none focus:ring-2 focus:ring-iris-500/20;
   }
 
   .label {
-    @apply mb-1.5 block text-xs font-medium uppercase tracking-wide text-slate-500;
+    @apply mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500;
   }
 
-  .card {
-    @apply rounded-2xl border border-slate-800/80 bg-slate-900/70 shadow-card backdrop-blur;
-  }
-
+  /* --- Tags & chips ------------------------------------------------------ */
   .chip {
-    @apply inline-flex items-center gap-1.5 rounded-full border border-slate-700/70 bg-slate-800/60 px-2.5 py-1 text-[11px] font-medium text-slate-300;
+    @apply inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-medium text-zinc-300;
   }
 
-  /* Skeleton shimmer for loading states. */
+  /* --- Misc -------------------------------------------------------------- */
+  .copyable {
+    @apply inline-flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 font-mono text-xs text-zinc-300 transition hover:border-white/10 hover:bg-white/[0.04];
+  }
+
   .skeleton {
-    @apply animate-shimmer rounded-lg bg-slate-800/60;
+    @apply animate-shimmer rounded-lg bg-white/[0.05];
     background-image: linear-gradient(
       90deg,
-      rgba(30, 41, 59, 0) 0%,
-      rgba(148, 163, 184, 0.08) 50%,
-      rgba(30, 41, 59, 0) 100%
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      rgba(255, 255, 255, 0) 100%
     );
     background-size: 400px 100%;
     background-repeat: no-repeat;
   }
 
-  /* Monospace value with copy affordance. */
-  .mono-value {
-    @apply inline-flex max-w-full items-center gap-1.5 rounded-md border border-transparent px-1 py-0.5 font-mono text-xs text-slate-300 transition hover:border-slate-700 hover:bg-slate-800/60;
+  .divider {
+    @apply h-px w-full bg-white/[0.06];
   }
 }
 
@@ -86,16 +118,18 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  @apply rounded-full bg-slate-700/70;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
 }
 ::-webkit-scrollbar-thumb:hover {
-  @apply bg-slate-600;
+  background: rgba(255, 255, 255, 0.2);
 }
 
-/* Subtle grid backdrop for hero sections */
+/* Fine grid backdrop for the hero */
 .hero-grid {
-  background-image: linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: radial-gradient(ellipse 80% 80% at 50% 0%, black 40%, transparent 100%);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, black 30%, transparent 100%);
 }

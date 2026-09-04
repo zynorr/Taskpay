@@ -5,36 +5,35 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: {
-          50: "#eef2ff",
-          100: "#e0e7ff",
-          200: "#c7d2fe",
-          300: "#a5b4fc",
-          400: "#818cf8",
-          500: "#6366f1",
-          600: "#4f46e5",
-          700: "#4338ca",
-          800: "#3730a3",
-          900: "#312e81",
-          950: "#1e1b4b",
+        // Single brand hue (iris) used with alpha modifiers: bg-iris/10, text-iris-300…
+        iris: {
+          200: "#C9C3FF",
+          300: "#AEA5FF",
+          400: "#9386FF",
+          500: "#7A68FF",
+          600: "#6B4EFF",
+          700: "#5A3EEB",
+          800: "#482FC4",
         },
-        surface: {
-          900: "#0b1120",
-          850: "#0f172a",
-          800: "#111c33",
-          700: "#1a2742",
+        ink: {
+          950: "#09090B",
+          900: "#0E0E11",
+          850: "#121216",
+          800: "#16161B",
+          700: "#1E1E24",
         },
       },
       fontFamily: {
         sans: [
+          "var(--font-geist-sans)",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",
           "Segoe UI",
-          "Roboto",
           "sans-serif",
         ],
         mono: [
+          "var(--font-geist-mono)",
           "ui-monospace",
           "SFMono-Regular",
           "Menlo",
@@ -42,19 +41,21 @@ const config: Config = {
           "monospace",
         ],
       },
+      letterSpacing: {
+        tightest: "-0.03em",
+      },
       boxShadow: {
-        glow: "0 0 24px -6px rgba(99, 102, 241, 0.45)",
-        "glow-sm": "0 0 14px -4px rgba(99, 102, 241, 0.4)",
-        card: "0 1px 0 0 rgba(148, 163, 184, 0.06) inset, 0 8px 24px -12px rgba(0, 0, 0, 0.6)",
+        panel: "0 1px 0 0 rgba(255,255,255,0.04) inset, 0 12px 32px -20px rgba(0,0,0,0.9)",
+        pop: "0 0 0 1px rgba(255,255,255,0.06), 0 16px 40px -16px rgba(0,0,0,0.85)",
       },
       keyframes: {
-        "fade-in": {
-          "0%": { opacity: "0", transform: "translateY(4px)" },
+        "fade-up": {
+          "0%": { opacity: "0", transform: "translateY(6px)" },
           "100%": { opacity: "1", transform: "translateY(0)" },
         },
-        "pulse-dot": {
-          "0%, 100%": { opacity: "1", transform: "scale(1)" },
-          "50%": { opacity: "0.55", transform: "scale(0.85)" },
+        "pulse-soft": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.4" },
         },
         shimmer: {
           "0%": { backgroundPosition: "-400px 0" },
@@ -62,8 +63,8 @@ const config: Config = {
         },
       },
       animation: {
-        "fade-in": "fade-in 0.25s ease-out both",
-        "pulse-dot": "pulse-dot 2s ease-in-out infinite",
+        "fade-up": "fade-up 0.3s cubic-bezier(0.16, 1, 0.3, 1) both",
+        "pulse-soft": "pulse-soft 2.2s ease-in-out infinite",
         shimmer: "shimmer 1.4s linear infinite",
       },
     },

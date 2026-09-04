@@ -331,13 +331,13 @@ export const Status = {
 } as const;
 
 export const STATUS_LABELS: Record<number, string> = {
-  [Status.Created]: "Created",
-  [Status.Accepted]: "Accepted",
-  [Status.Submitted]: "Submitted",
-  [Status.Disputed]: "Disputed",
-  [Status.PendingChallenge]: "Pending challenge",
-  [Status.Challenged]: "Challenged (Senior Arbiter)",
-  [Status.Released]: "Released",
+  [Status.Created]: "Open",
+  [Status.Accepted]: "In progress",
+  [Status.Submitted]: "Under review",
+  [Status.Disputed]: "In dispute",
+  [Status.PendingChallenge]: "Challenge open",
+  [Status.Challenged]: "Under appeal",
+  [Status.Released]: "Paid out",
   [Status.Refunded]: "Refunded",
   [Status.Cancelled]: "Cancelled",
 };
@@ -352,5 +352,5 @@ export const AgentRole = {
 export const ROLE_LABELS: Record<number, string> = {
   [AgentRole.Reviewer]: "Reviewer",
   [AgentRole.FraudSanity]: "Fraud/Sanity",
-  [AgentRole.Arbiter]: "Arbiter",
+  [AgentRole.Arbiter]: "Senior Arbiter",
 };
