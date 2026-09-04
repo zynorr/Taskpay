@@ -10,6 +10,7 @@ import {
   specHashOf,
   myIdentity,
   fetchTaskCount,
+  taskIdFromCreateReceipt,
   fetchAgentRating,
   fetchTaskHistory,
   fetchAgentCompletedCount,
@@ -207,9 +208,31 @@ export default function CreateTaskPage() {
 
     setBusy(true);
     try {
+      // Capture the spec BEFORE anything clears the form: the archive payload
+      // below must never be emptied by the state resets that follow.
+      const name = taskName.trim();
+      const spec = specText.trim();
       const res = await writeGasless("createTask", args, { value: amountWei });
+      // The receipt's TaskCreated event is authoritative; the count read is a
+      // fallback for a lagging RPC node (and would otherwise point at the
+      // previous task).
+      const fromReceipt = await taskIdFromCreateReceipt(res.hash);
       const count = await fetchTaskCount();
-      setCreated({ taskId: count - 1, hash: res.hash });
+      const taskId = fromReceipt ?? count - 1;
+      setCreated({ taskId, hash: res.hash });
+
+      // Register the spec text with the archive so the detail page and the
+      // dispute agents can read what was asked. Done here — synchronously with
+      // the captured values — not in an effect, which would observe the
+      // already-cleared form state.
+      fetch(`/api/specs/${taskId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, spec_text: spec, spec_hash: specHashOf(spec) }),
+      }).catch(() => {
+        /* best-effort; the on-chain hash is the anchor */
+      });
+
       setTaskName("");
       setSpecText("");
       setAgent("");
@@ -220,23 +243,6 @@ export default function CreateTaskPage() {
       setBusy(false);
     }
   }
-
-  // Register the spec text with the archive so the detail page and the dispute
-  // agents can read what was asked.
-  useEffect(() => {
-    if (!created) return;
-    fetch(`/api/specs/${created.taskId}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        name: taskName.trim(),
-        spec_text: specText.trim(),
-        spec_hash: specHashOf(specText.trim()),
-      }),
-    }).catch(() => {
-      /* best-effort; the on-chain hash is the anchor */
-    });
-  }, [created, specText]);
 
   const connectedReady = isConnected && bundlerOnline;
 

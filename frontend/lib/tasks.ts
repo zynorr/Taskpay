@@ -1,5 +1,5 @@
 import { getPublicClient, getAccount, signMessage as coreSignMessage } from "@wagmi/core";
-import { keccak256, toHex } from "viem";
+import { keccak256, toHex, parseEventLogs } from "viem";
 import { config } from "@/lib/wagmi";
 import { CONTRACT_ADDRESS, TASKPAY_ABI, Status } from "@/lib/contract";
 import { smartAccountOf, encodeTaskPayCall } from "@/lib/aa";
@@ -21,6 +21,27 @@ type WriteName =
   | "cancelOpenTask"
   | "reclaimAfterDeadline"
   | "setCancellationApproval";
+
+/**
+ * The task id a createTask tx actually minted, decoded from its TaskCreated
+ * event. Authoritative — unlike reading taskCount after the fact, it cannot
+ * be affected by RPC freshness or a concurrent creation.
+ */
+export async function taskIdFromCreateReceipt(txHash: `0x${string}`): Promise<number | null> {
+  try {
+    const client = getPublicClient(config);
+    const receipt = await client.getTransactionReceipt({ hash: txHash });
+    const events = parseEventLogs({
+      abi,
+      logs: receipt.logs,
+      eventName: "TaskCreated",
+    });
+    const created = events[0];
+    return created ? Number(created.args.taskId) : null;
+  } catch {
+    return null; // caller falls back to taskCount - 1
+  }
+}
 
 export async function fetchTaskCount(): Promise<number> {
   const client = getPublicClient(config);

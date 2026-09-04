@@ -1,0 +1,8 @@
+{
+  "chain_id": 968,
+  "task_id": 33,
+  "spec_text": "Repro test: deliver file repro.txt containing the word ok.",
+  "spec_hash": "0x8fd72638de0f0f416ed310f74b345ddfdc7490b0ca27a5d261b74664ed00f693",
+  "name": "Repro listing test",
+  "created_at": "2026-09-04T14:12:23.495Z"
+}
