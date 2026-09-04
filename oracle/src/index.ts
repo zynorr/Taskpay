@@ -43,7 +43,11 @@ const healthServer = createServer((req, res) => {
     }),
   );
 });
-healthServer.listen(port, () => {
+// Bind to loopback only: in the single-container deployment the frontend
+// reaches this via the same-origin /api/bundler proxy (ORACLE_INTERNAL_URL),
+// and Render should not advertise/expose the raw /v1/send surface on a second
+// public port.
+healthServer.listen(port, "127.0.0.1", () => {
   logger.info("health_server_listening", { port });
   logger.info("bundler_mounted", {
     configured: Boolean(env.AA_FACTORY && env.PAYMASTER),
