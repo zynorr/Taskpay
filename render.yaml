@@ -1,14 +1,23 @@
 # Render blueprint for the TaskPay public testnet MVP.
 #
 # One web service runs BOTH the oracle (poller + sponsor bundler on an
-# internal port) and the Next.js frontend (public port 3000) behind a
-# persistent disk mounted at /data — Render mounts a disk to a single service,
-# so keeping both processes in one container is what lets them share the
-# archive (specs / reasoning / disputes) across redeploys.
+# internal port) and the Next.js frontend (public port 3000) in one container,
+# so they share the archive directory (specs / reasoning / disputes) under
+# /data (TASKPAY_DATA_DIR). The free plan cannot attach a disk, so /data is
+# the container's own filesystem: it lasts for the life of the instance and
+# resets on each deploy. On a paid plan, uncomment the `disk` block below to
+# persist /data across redeploys — on-chain state is always the source of
+# truth either way.
 #
 # Deploy: Render dashboard → New → Blueprint → this repo. Fill the two
 # `sync: false` secrets (ORACLE_PRIVATE_KEY, GROQ_API_KEY) in the dashboard
 # after the service is created. See DEPLOY.md → "Public deployment (Render)".
+#
+# Paid-plan persistence (uncomment to enable):
+#   disk:
+#     name: data
+#     mountPath: /data
+#     sizeGB: 1
 services:
   - type: web
     name: taskpay
@@ -19,10 +28,6 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
     envVars:
       # --- chain / sponsor stack (public constants) ---
       - key: RPC_URL

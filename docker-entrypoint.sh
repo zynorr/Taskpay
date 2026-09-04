@@ -2,8 +2,9 @@
 # Boot both processes in the single public container:
 #   - the oracle (event poller + sponsor bundler) on the internal port 8787
 #   - the Next.js frontend on the public port 3000
-# Both read/write the archive under TASKPAY_DATA_DIR, which the deployment
-# points at the mounted persistent disk so archives survive redeploys.
+# Both read/write the archive under TASKPAY_DATA_DIR. Point it at a mounted
+# disk (paid plans) to persist archives across redeploys; on the free plan it
+# stays on the container filesystem and resets with each deploy.
 set -e
 
 export TASKPAY_DATA_DIR="${TASKPAY_DATA_DIR:-/data}"

@@ -103,15 +103,14 @@ calls. See the repo README's Phase 4 section and `scripts/live_gasless.mjs`.
 
 The repo ships a Render blueprint (`render.yaml`) plus a `Dockerfile` that
 builds both the oracle and the frontend into one image, so a **single web
-service** exposes the app on one port while the persistent disk is shared by
-both processes (Render mounts a disk to one service only — keeping them in
-one container is what lets them share `data/`).
+service** exposes the app on one port and both processes share the archive
+directory under `/data` (`TASKPAY_DATA_DIR`).
 
 ### Deploy
 
 1. Push to GitHub (repo: `zynorr/Taskpay`).
 2. Render dashboard → **New → Blueprint** → select the repo, branch `main`.
-   `render.yaml` provisions the service, disk (`/data`, 1 GB) and env group.
+   `render.yaml` provisions the service and its env group.
 3. In the service's **Environment** tab, fill the two `sync: false` secrets:
    - `ORACLE_PRIVATE_KEY` — the oracle signer EOA (same as `ORACLE_ADDRESS`).
    - `GROQ_API_KEY` — the AI agents' key.
@@ -123,13 +122,19 @@ one container is what lets them share `data/`).
 |---|---|---|
 | Oracle (poller + sponsor bundler) | same container, internal | 8787 |
 | Next.js frontend | same container, public | 3000 |
-| Persistent disk | mounted at `/data` (`TASKPAY_DATA_DIR=/data`) | — |
+| Archive directory | `/data` (`TASKPAY_DATA_DIR=/data`) | — |
 
 - The browser never reaches 8787: `NEXT_PUBLIC_BUNDLER_URL=/api/bundler` and
   the Next route `app/api/bundler/v1/[route]/route.ts` proxies
   `/api/bundler/v1/quote|send` → `127.0.0.1:8787/v1/...` (`ORACLE_INTERNAL_URL`).
-- Archives (specs, reasoning, disputes) live on `/data` and survive redeploys;
-  the oracle resumes its poller from the persisted cursor file there.
+- Archives (specs, reasoning, disputes) and the poller cursor live under
+  `/data`. On the free plan this is the container's own filesystem, so it
+  lasts for the life of the instance and resets on each deploy. On a paid
+  plan, uncomment the `disk` block in `render.yaml` to persist `/data` across
+  redeploys.
+- **On-chain state is the source of truth**: tasks, escrow, ratings and
+  dispute statuses live in `TaskPay.sol` and survive any restart. The
+  archives are human-readable evidence of the oracle's reasoning.
 - The oracle's `/health` (internal 8787) reports the paymaster deposit; refill
   with `EntryPoint.depositTo(paymaster)` from any funded EOA when it drops
   (warn at 0.02 tBOT, critical at 0.005 tBOT).
@@ -141,14 +146,16 @@ one container is what lets them share `data/`).
 - Free instances **sleep after ~15 min idle** and wake on the next request;
   the poller only runs while the instance is awake. Uptime monitoring (e.g.
   Render cron/UptimeRobot hitting `/`) keeps it warm for demos.
-- Disk is billed separately once the plan needs it; 1 GB covers thousands of
-  archive files.
+- The archive directory resets on every deploy (no disk on free); tasks and
+  dispute history still render because they come from the chain. A redeploy
+  right after a dispute loses that dispute's local reasoning files unless
+  they were pulled into the repo or a disk is attached.
 
 ### Split services later (optional)
 
 When the app outgrows one container: run the oracle as its own service
 (public `8787` + rate limit + a reverse-proxy allowlist) and point
-`NEXT_PUBLIC_BUNDLER_URL` at it, mounting the disk on the oracle and letting
+`NEXT_PUBLIC_BUNDLER_URL` at it, attaching the disk to the oracle and letting
 the frontend read archives through a read-only archive API on the oracle.
 
 ## Security notes for the deployer
