@@ -1,7 +1,7 @@
 import { getPublicClient, getAccount, signMessage as coreSignMessage } from "@wagmi/core";
 import { keccak256, toHex } from "viem";
 import { config } from "@/lib/wagmi";
-import { CONTRACT_ADDRESS, TASKPAY_ABI } from "@/lib/contract";
+import { CONTRACT_ADDRESS, TASKPAY_ABI, Status } from "@/lib/contract";
 import { smartAccountOf, encodeTaskPayCall } from "@/lib/aa";
 import { gaslessQuote, gaslessSend } from "@/lib/gasless";
 import type { TaskView, VerdictView, DisputeView, AgentRatingRow } from "@/lib/types";
@@ -364,5 +364,37 @@ export async function writeGasless(
   const sent = await gaslessSend(quote.userOp, signature);
   // handleOps already mined (sendUserOp waits for the receipt); report success.
   return { hash: sent.txHash as `0x${string}`, status: "success" };
+}
+
+/** Statuses that are (or were) an active dispute phase. */
+export function isDisputeRange(s: number): boolean {
+  return s >= Status.Disputed && s <= Status.Challenged;
+}
+
+/**
+ * Which of the given tasks were ever disputed, for a party's track record.
+ * A task counts if any AI verdict is recorded on-chain (verdict storage
+ * persists after settlement), its status is in the dispute range, or the
+ * oracle has archived a dispute reason for it. Uses the same signal set as
+ * the agent profile page so create-flow warnings and profiles never drift.
+ */
+export async function fetchDisputedTaskIds(agentTasks: TaskView[]): Promise<Set<bigint>> {
+  const flagged = new Set<bigint>();
+  await Promise.all(
+    agentTasks.map(async (task) => {
+      try {
+        const [v, reasonRes] = await Promise.all([
+          fetchVerdicts(task.taskId),
+          fetch(`/api/disputes/${task.taskId}`).then((res) => res.ok),
+        ]);
+        if (v.some((x) => x.hasVoted) || isDisputeRange(task.status) || reasonRes) {
+          flagged.add(task.taskId);
+        }
+      } catch {
+        /* treat as not disputed */
+      }
+    }),
+  );
+  return flagged;
 }
 

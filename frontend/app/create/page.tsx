@@ -1,10 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { parseEther, formatEther } from "viem";
 import { useAccount } from "wagmi";
-import { writeGasless, specHashOf, myIdentity, fetchTaskCount, fetchAgentRating } from "@/lib/tasks";
+import {
+  writeGasless,
+  specHashOf,
+  myIdentity,
+  fetchTaskCount,
+  fetchAgentRating,
+  fetchTaskHistory,
+  fetchAgentCompletedCount,
+  fetchDisputedTaskIds,
+} from "@/lib/tasks";
 import { smartAccountOf, bundlerUrl } from "@/lib/aa";
 import {
   shortAddress,
@@ -22,6 +32,7 @@ import {
   Check,
   Copy,
   Info,
+  Scale,
   Star,
   Wallet,
 } from "@/components/icons";
@@ -583,6 +594,7 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
   }>(null);
   const [rating, setRating] = useState<{ totalScore: bigint; count: bigint } | null>(null);
   const [ratingLoaded, setRatingLoaded] = useState(false);
+  const [reputation, setReputation] = useState<{ completed: number; disputed: number } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -629,6 +641,32 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
         /* no reputation shown */
       })
       .finally(() => alive && setRatingLoaded(true));
+    return () => {
+      alive = false;
+    };
+  }, [agent]);
+
+  // Track record for the soft risk warning: how many of the agent's own
+  // completed tasks ended in a dispute (same signal as the profile page via
+  // fetchDisputedTaskIds). Purely advisory — creation is never blocked.
+  useEffect(() => {
+    let alive = true;
+    setReputation(null);
+    (async () => {
+      try {
+        const history = await fetchTaskHistory(agent);
+        const agentTasks = history.filter(
+          (t) => t.agent.toLowerCase() === agent.toLowerCase(),
+        );
+        const [completed, flagged] = await Promise.all([
+          fetchAgentCompletedCount(agent),
+          fetchDisputedTaskIds(agentTasks),
+        ]);
+        if (alive) setReputation({ completed, disputed: flagged.size });
+      } catch {
+        /* no reputation shown */
+      }
+    })();
     return () => {
       alive = false;
     };
@@ -722,10 +760,59 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
     </p>
   ) : null;
 
+  const ratingAvg = rating && rating.count > 0n ? Number(rating.totalScore) / Number(rating.count) : null;
+  const lowRating = ratingAvg !== null && ratingAvg < 3.0;
+  const disputeRisk =
+    reputation !== null &&
+    reputation.disputed > 0 &&
+    (reputation.disputed >= 2 || reputation.completed <= 2);
+  const riskWarn = lowRating || disputeRisk;
+
   return (
     <>
       {check}
       {ratingLine}
+      {riskWarn && (
+        <div className="mt-2 space-y-1.5 rounded-lg border border-warn-line bg-warn-soft px-3.5 py-2.5">
+          {lowRating && (
+            <p className="flex items-start gap-2 text-[12px] leading-relaxed text-mute">
+              <Star size={13} className="mt-0.5 shrink-0 text-warn" />
+              <span>
+                Rated{" "}
+                <strong className="font-mono text-warn tnum">{ratingAvg!.toFixed(1)}</strong> across{" "}
+                {rating!.count.toString()} review{rating!.count === 1n ? "" : "s"} — below the 3.0
+                bar. This agent has a poor on-chain record.
+              </span>
+            </p>
+          )}
+          {disputeRisk && (
+            <p className="flex items-start gap-2 text-[12px] leading-relaxed text-mute">
+              <Scale size={13} className="mt-0.5 shrink-0 text-warn" />
+              <span>
+                {reputation!.disputed} dispute{reputation!.disputed === 1 ? "" : "s"} on record
+                across {reputation!.completed} completed task
+                {reputation!.completed === 1 ? "" : "s"}.{" "}
+                <Link
+                  href={`/agent/${agent}`}
+                  className="text-warn underline underline-offset-2 hover:text-fg"
+                >
+                  Review the record
+                </Link>{" "}
+                before funding escrow.
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+      {!riskWarn && reputation && reputation.completed > 0 && (
+        <p className="mt-1.5 flex items-center gap-1.5 text-[11px] text-faint">
+          <Check size={11} className="text-ok" />
+          <span className="text-mute">
+            {reputation.completed} completed task{reputation.completed === 1 ? "" : "s"} · no
+            disputes on record
+          </span>
+        </p>
+      )}
     </>
   );
 }

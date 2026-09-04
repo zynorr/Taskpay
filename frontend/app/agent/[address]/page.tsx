@@ -10,9 +10,9 @@ import {
   fetchAgentRatingRows,
   fetchAgentCompletedCount,
   fetchTaskHistory,
-  fetchVerdicts,
+  fetchDisputedTaskIds,
+  isDisputeRange,
 } from "@/lib/tasks";
-import { Status } from "@/lib/contract";
 import {
   shortAddress,
   formatAmount,
@@ -31,10 +31,6 @@ function stars(avg: number) {
       className={n <= Math.round(avg) ? "text-amber-500" : "text-faint"}
     />
   ));
-}
-
-function isDisputeRange(s: number) {
-  return s >= Status.Disputed && s <= Status.Challenged;
 }
 
 export default function AgentProfilePage({ params }: { params: Promise<{ address: string }> }) {
@@ -83,27 +79,10 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
         .sort((x, y) => (x.taskId < y.taskId ? 1 : -1)); // newest first
       setHistory(agentTasks);
 
-      // Was a task ever disputed? Verdict storage persists after settlement,
-      // so any recorded vote marks a past dispute; active dispute statuses
-      // also count.
-      const flagged = new Set<string>();
-      await Promise.all(
-        agentTasks.map(async (task) => {
-          try {
-            const [v, reasonRes] = await Promise.all([
-              fetchVerdicts(task.taskId),
-              fetch(`/api/disputes/${task.taskId}`).then((res) => res.ok),
-            ]);
-            const voted = v.some((x) => x.hasVoted);
-            if (voted || isDisputeRange(task.status) || reasonRes) {
-              flagged.add(task.taskId.toString());
-            }
-          } catch {
-            /* treat as not disputed */
-          }
-        }),
-      );
-      setDisputedIds(flagged);
+      // Was a task ever disputed? Shared with the create-flow reputation
+      // warning (fetchDisputedTaskIds) so both surfaces read the same signal.
+      const flagged = await fetchDisputedTaskIds(agentTasks);
+      setDisputedIds(new Set(Array.from(flagged, String)));
       setSpecs(specMap);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
