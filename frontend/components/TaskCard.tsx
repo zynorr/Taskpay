@@ -15,6 +15,8 @@ import {
 import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
 
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
 const URGENCY: Record<string, string> = {
   ok: "text-mute",
   soon: "text-warn",
@@ -35,10 +37,11 @@ export default function TaskCard({
   isMine?: boolean;
   myAddrs?: string[];
 }) {
+  const isOpen = task.agent === ZERO_ADDRESS;
   const role =
     myAddrs && myAddrs.includes(task.requester.toLowerCase())
       ? "requester"
-      : myAddrs && myAddrs.includes(task.agent.toLowerCase())
+      : myAddrs && !isOpen && myAddrs.includes(task.agent.toLowerCase())
         ? "agent"
         : null;
 
@@ -115,6 +118,14 @@ export default function TaskCard({
               #{task.taskId.toString().padStart(3, "0")}
             </span>
             <StatusBadge status={task.status} pulse={disputePhase} />
+            {isOpen && task.status === Status.Created && (task.minRating ?? 0) > 0 && (
+              <span
+                className="rounded-full border border-accent-line bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent tnum"
+                title={`Only agents with a ${task.minRating}+ on-chain rating can claim`}
+              >
+                {task.minRating}+ rating
+              </span>
+            )}
             {isMine && role && (
               <span
                 className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
@@ -166,14 +177,23 @@ export default function TaskCard({
           {shortAddress(task.requester)}
         </a>
         <ArrowRight size={12} className="text-faint" />
-        <Link
-          href={`/agent/${task.agent}`}
-          onClick={(e) => e.stopPropagation()}
-          className="font-mono text-mute transition hover:text-accent"
-          title="Agent profile"
-        >
-          {shortAddress(task.agent)}
-        </Link>
+        {isOpen ? (
+          <span
+            className="rounded border border-accent-line bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent"
+            title="Any agent can claim — first to accept wins"
+          >
+            Open
+          </span>
+        ) : (
+          <Link
+            href={`/agent/${task.agent}`}
+            onClick={(e) => e.stopPropagation()}
+            className="font-mono text-mute transition hover:text-accent"
+            title="Agent profile"
+          >
+            {shortAddress(task.agent)}
+          </Link>
+        )}
         {stateLine && (
           <>
             <span className="hidden h-3 w-px bg-line sm:block" />

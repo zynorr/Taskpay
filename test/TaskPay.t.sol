@@ -145,10 +145,165 @@ contract TaskPayTest is Test {
         taskpay.createTask(agent, SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
     }
 
-    function test_createTask_revertsOnZeroAgent() public {
+    function test_createTask_zeroAgentCreatesOpenTask() public {
         vm.prank(requester);
-        vm.expectRevert("TaskPay: invalid agent");
-        taskpay.createTask{value: PAYMENT}(address(0), SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+        uint256 taskId = taskpay.createTask{value: PAYMENT}(address(0), SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+
+        assertEq(uint8(_statusOf(taskId)), uint8(TaskPay.Status.Created));
+        (, address openAgent, , , , , , , , ) = taskpay.tasks(taskId);
+        assertEq(openAgent, address(0), "open task has no agent yet");
+        uint256[] memory open = taskpay.getOpenTasks();
+        assertEq(open.length, 1);
+        assertEq(open[0], taskId);
+    }
+
+    function test_acceptTask_openTask_firstComeFirstServed() public {
+        vm.prank(requester);
+        uint256 taskId = taskpay.createTask{value: PAYMENT}(address(0), SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+
+        address firstAgent = makeAddr("firstAgent");
+        vm.deal(firstAgent, 1 ether);
+        vm.prank(firstAgent);
+        taskpay.acceptTask(taskId);
+
+        (, address claimedAgent, , , , , , , , ) = taskpay.tasks(taskId);
+        assertEq(claimedAgent, firstAgent, "first caller becomes the agent");
+        assertEq(uint8(_statusOf(taskId)), uint8(TaskPay.Status.Accepted));
+        assertEq(taskpay.getOpenTasks().length, 0, "no longer open");
+
+        // A second agent arriving after the claim sees the task is gone —
+        // the status check fires before the agent check.
+        address lateAgent = makeAddr("lateAgent");
+        vm.prank(lateAgent);
+        vm.expectRevert("TaskPay: not created");
+        taskpay.acceptTask(taskId);
+    }
+
+    // ------------------------------------------------------------------ //
+    // createOpenTask + minRating guard
+    // ------------------------------------------------------------------ //
+
+    /// Seeds `count` ratings of `score` for `agent` by running real released
+    /// tasks, so the accept guard is exercised against genuine on-chain state.
+    function _seedReputation(address who, uint256 score, uint256 count) internal {
+        for (uint256 i = 0; i < count; i++) {
+            vm.prank(requester);
+            uint256 id = taskpay.createTask{value: PAYMENT}(who, SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+            vm.deal(who, 1 ether); // just in case; payouts don't need gas in forge
+            vm.prank(who);
+            taskpay.acceptTask(id);
+            vm.prank(who);
+            taskpay.submitWork(id, "done");
+            vm.prank(requester);
+            taskpay.release(id);
+            vm.prank(requester);
+            taskpay.rateAgent(id, uint8(score));
+        }
+    }
+
+    function test_createOpenTask_storesMinRating() public {
+        vm.prank(requester);
+        uint256 taskId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 4);
+        assertEq(taskpay.minRatingOf(taskId), 4);
+    }
+
+    function test_createOpenTask_revertsOnRatingAbove5() public {
+        vm.prank(requester);
+        vm.expectRevert("TaskPay: rating max 5");
+        taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 6);
+    }
+
+    function test_acceptTask_openTask_minRating_unratedAgentBlocked() public {
+        vm.prank(requester);
+        uint256 taskId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 3);
+
+        address unrated = makeAddr("unrated");
+        vm.prank(unrated);
+        vm.expectRevert("TaskPay: agent rating too low");
+        taskpay.acceptTask(taskId);
+        // Still open after the failed claim.
+        assertEq(taskpay.getOpenTasks().length, 1);
+    }
+
+    function test_acceptTask_openTask_minRating_lowAverageBlocked() public {
+        // The taker has history but a 2-star average — below the 3 floor.
+        address taker = makeAddr("lowTaker");
+        _seedReputation(taker, 2, 2);
+
+        vm.prank(requester);
+        uint256 taskId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 3);
+
+        vm.prank(taker);
+        vm.expectRevert("TaskPay: agent rating too low");
+        taskpay.acceptTask(taskId);
+    }
+
+    function test_acceptTask_openTask_minRating_qualifiedAgentClaims() public {
+        address taker = makeAddr("goodTaker");
+        _seedReputation(taker, 5, 2); // average 5.0
+
+        vm.prank(requester);
+        uint256 taskId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 4);
+
+        vm.prank(taker);
+        taskpay.acceptTask(taskId);
+        (, address claimedAgent, , , , , , , , ) = taskpay.tasks(taskId);
+        assertEq(claimedAgent, taker, "qualified agent claimed the gated task");
+    }
+
+    function test_acceptTask_openTask_minRating_floorIsIntegerAverage() public {
+        // 5 + 4 => avg 4.5, floored to 4 — passes a 4 floor, fails a 5 floor.
+        address taker = makeAddr("midTaker");
+        _seedReputation(taker, 5, 1);
+        _seedReputation(taker, 4, 1);
+
+        vm.prank(requester);
+        uint256 passId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 4);
+        vm.prank(taker);
+        taskpay.acceptTask(passId);
+
+        vm.prank(requester);
+        uint256 failId = taskpay.createOpenTask{value: PAYMENT}(SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD, 5);
+        vm.prank(taker);
+        vm.expectRevert("TaskPay: agent rating too low");
+        taskpay.acceptTask(failId);
+    }
+
+    function test_acceptTask_designatedTaskIgnoresMinRating() public {
+        // minRating only gates open tasks; a designated agent with zero
+        // reputation is always acceptable (the requester chose them).
+        vm.prank(requester);
+        uint256 taskId = taskpay.createTask{value: PAYMENT}(agent, SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+
+        vm.prank(agent);
+        taskpay.acceptTask(taskId);
+        assertEq(uint8(_statusOf(taskId)), uint8(TaskPay.Status.Accepted));
+    }
+
+    function test_acceptTask_openTask_revertsForRequester() public {
+        vm.prank(requester);
+        uint256 taskId = taskpay.createTask{value: PAYMENT}(address(0), SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+
+        vm.prank(requester);
+        vm.expectRevert("TaskPay: requester cannot accept own task");
+        taskpay.acceptTask(taskId);
+    }
+
+    function test_acceptTask_openTask_fullLifecyclePaysClaimer() public {
+        vm.prank(requester);
+        uint256 taskId = taskpay.createTask{value: PAYMENT}(address(0), SPEC_HASH, ACCEPT_WINDOW, WORK_DURATION, REVIEW_PERIOD);
+
+        address taker = makeAddr("taker");
+        vm.deal(taker, 1 ether);
+        vm.prank(taker);
+        taskpay.acceptTask(taskId);
+        vm.prank(taker);
+        taskpay.submitWork(taskId, "done");
+
+        uint256 takerBefore = taker.balance;
+        vm.prank(requester);
+        taskpay.release(taskId);
+        assertEq(taker.balance, takerBefore + PAYMENT, "claimer is paid");
     }
 
     function test_createTask_revertsWhenRequesterIsAgent() public {

@@ -174,7 +174,13 @@ export async function buildQuote(input: QuoteInput): Promise<QuoteResult> {
 
   const gasPrice = await chainGasPrice();
   const verificationGasLimit = 300_000n;
-  const callGasLimit = 250_000n;
+  // Room for on-chain text storage: submitWork stores the full submission
+  // string in the Task struct (~22k gas per 32-byte word), so a ~2KB
+  // deliverable needs ~1.4M+ gas. 250k silently OOG'd such ops (v0.7
+  // swallows execution failures — tx mines with status 1 and success=false).
+  // Over-collateralizing the prefund costs nothing: the EntryPoint charges
+  // actual gas and refunds the rest to the paymaster.
+  const callGasLimit = 2_000_000n;
   const preVerificationGas = 50_000n; // covers calldata + fixed overhead
 
   // v0.7 EntryPoint sequences nonces per-sender via its NonceManager.
@@ -223,6 +229,43 @@ function encodeHandleOps(ops: UserOp[], beneficiary: string): string {
   return entryPointIface.encodeFunctionData("handleOps", [ops.map(encodeUserOp), beneficiary]);
 }
 
+// v0.7 EntryPoint events (canonical ABI). UserOperationEvent carries the
+// per-op success flag: execution-phase failures are CAUGHT by handleOps (the
+// tx still mines with status 1), so the receipt status alone cannot tell a
+// successful op from a silently reverted one.
+const ENTRY_POINT_EVENTS = [
+  "event UserOperationEvent(bytes32 indexed userOpHash, address indexed sender, address indexed paymaster, uint256 nonce, bool success, uint256 actualGasCost, uint256 actualGasUsed)",
+] as const;
+
+/** Parse the simulated/broadcast op's UserOperationEvent success flag. */
+function findUserOpSuccess(logs: readonly { topics: readonly string[]; data: string }[], sender: string): boolean | null {
+  const iface = new Interface(ENTRY_POINT_EVENTS);
+  for (const log of logs) {
+    let parsed;
+    try {
+      parsed = iface.parseLog({ topics: log.topics as string[], data: log.data });
+    } catch {
+      continue; // not a UserOperationEvent
+    }
+    if (parsed && String(parsed.args.sender).toLowerCase() === sender.toLowerCase()) {
+      return Boolean(parsed.args.success);
+    }
+  }
+  return null; // no matching event found
+}
+
+/** True if the op FAILED during execution even though the tx mined (status 1). */
+async function assertUserOpSucceeded(txHash: string, userOp: UserOp): Promise<void> {
+  const receipt = await provider.getTransactionReceipt(txHash);
+  if (!receipt) throw new Error(`no receipt for handleOps tx ${txHash}`);
+  const success = findUserOpSuccess(receipt.logs, userOp.sender);
+  if (success === false) {
+    // Actual gas was spent and cannot be recovered; fail loud so callers
+    // (bot, frontend) know the task did NOT transition and can retry.
+    throw new Error(`UserOperation failed during execution (tx ${txHash} mined but the op's inner call reverted or ran out of gas)`);
+  }
+}
+
 /**
  * Send step: simulate with eth_call (no gas spent on failure), then broadcast
  * handleOps from the bundler (oracle) EOA. The paymaster deposit in the
@@ -267,5 +310,9 @@ export async function sendUserOp(userOp: UserOp): Promise<{ txHash: string; user
     }
     return { txHash: tx.hash };
   });
+  // The tx can mine with status 1 while the op itself failed during execution
+  // (v0.7 catches per-op failures). Check the UserOperationEvent success flag
+  // so a silently-failed op is reported instead of mistaken for a success.
+  await assertUserOpSucceeded(txHash, userOp);
   return { txHash, userOpHash };
 }

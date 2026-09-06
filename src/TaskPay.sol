@@ -114,6 +114,13 @@ contract TaskPay is ReentrancyGuard, Ownable {
     mapping(uint256 => Dispute) public disputes;
     mapping(uint256 => bool) public taskRated;
 
+    /// @dev Per-task reputation floor for OPEN tasks (0 = no requirement).
+    /// Claiming an open task with minRating > 0 requires the claimer's
+    /// on-chain average rating (floored) to be at least the minimum. Only
+    /// open tasks are gated: designated agents are hand-picked by the
+    /// requester, whose reputation check is their own responsibility.
+    mapping(uint256 => uint256) public minRatingOf;
+
     mapping(address => Rating[]) public agentRatings;
 
     /// @dev Mutual-cancellation votes (Accepted/Submitted only).
@@ -239,6 +246,9 @@ contract TaskPay is ReentrancyGuard, Ownable {
 
     /// @notice Requester locks BOT for a designated agent.
     /// @param agent The wallet (human or autonomous) that will do the work.
+    ///             Pass `address(0)` to post an **open task**: any agent may
+    ///             claim it via `acceptTask` — first come, first served (the
+    ///             chain serializes the race; the losers' txs revert).
     /// @param specHash keccak256 hash of the task spec text stored off-chain.
     /// @param acceptWindow Seconds the agent has to accept before the requester
     ///        can reclaim (prevents accept-after-reclaim races).
@@ -252,8 +262,37 @@ contract TaskPay is ReentrancyGuard, Ownable {
         uint256 workDuration,
         uint256 reviewPeriod
     ) external payable returns (uint256 taskId) {
+        taskId = _createTask(agent, specHash, acceptWindow, workDuration, reviewPeriod);
+    }
+
+    /// @notice Open variant of `createTask` with a reputation floor. Any agent
+    ///         whose on-chain average rating (floored integer average) is at
+    ///         least `minRating` may claim via `acceptTask`. `minRating = 0`
+    ///         means no requirement (pure first come, first served). Agents
+    ///         with no ratings cannot claim a task with minRating >= 1 — the
+    ///         first earned reputation unlocks gated work.
+    function createOpenTask(
+        bytes32 specHash,
+        uint256 acceptWindow,
+        uint256 workDuration,
+        uint256 reviewPeriod,
+        uint256 minRating
+    ) external payable returns (uint256 taskId) {
+        require(minRating <= 5, "TaskPay: rating max 5");
+        taskId = _createTask(address(0), specHash, acceptWindow, workDuration, reviewPeriod);
+        minRatingOf[taskId] = minRating;
+    }
+
+    /// @dev Shared create body for designated and open tasks.
+    function _createTask(
+        address agent,
+        bytes32 specHash,
+        uint256 acceptWindow,
+        uint256 workDuration,
+        uint256 reviewPeriod
+    ) internal returns (uint256 taskId) {
         require(msg.value > 0, "TaskPay: payment required");
-        require(agent != address(0) && agent != msg.sender, "TaskPay: invalid agent");
+        require(agent != msg.sender, "TaskPay: invalid agent");
         require(specHash != bytes32(0), "TaskPay: specHash required");
         require(acceptWindow > 0 && workDuration > 0 && reviewPeriod > 0, "TaskPay: windows required");
 
@@ -279,16 +318,46 @@ contract TaskPay is ReentrancyGuard, Ownable {
     }
 
     /// @notice The designated agent accepts, starting the work clock.
+    ///         For an **open task** (agent unset, i.e. `address(0)`), the
+    ///         FIRST caller becomes the agent — the chain serializes competing
+    ///         claims, so exactly one of N concurrent accept txs wins and the
+    ///         others revert. First come, first served, enforced on-chain.
     function acceptTask(uint256 taskId) external taskExists(taskId) {
         Task storage task = tasks[taskId];
         require(task.status == Status.Created, "TaskPay: not created");
-        require(msg.sender == task.agent, "TaskPay: only designated agent");
+        if (task.agent == address(0)) {
+            require(msg.sender != task.requester, "TaskPay: requester cannot accept own task");
+            // Reputation floor for open tasks (see minRatingOf). Unrated
+            // agents (count = 0) fail any minRating >= 1.
+            uint256 minRating = minRatingOf[taskId];
+            if (minRating > 0) {
+                (uint256 totalScore, uint256 count) = _ratingSummary(msg.sender);
+                require(count > 0 && totalScore / count >= minRating, "TaskPay: agent rating too low");
+            }
+            task.agent = msg.sender;
+        } else {
+            require(msg.sender == task.agent, "TaskPay: only designated agent");
+        }
         require(block.timestamp < task.acceptDeadline, "TaskPay: accept window passed");
 
         task.status = Status.Accepted;
         task.workDeadline = block.timestamp + _workDuration[taskId];
 
         emit TaskAccepted(taskId, msg.sender, task.workDeadline);
+    }
+
+    /// @notice All currently-open (unclaimed) tasks — the first-come pool.
+    ///         Marketplace and agent daemons use this to find claimable work.
+    function getOpenTasks() external view returns (uint256[] memory openIds) {
+        uint256 count;
+        for (uint256 i = 0; i < taskCount; i++) {
+            if (tasks[i].status == Status.Created && tasks[i].agent == address(0)) count++;
+        }
+        openIds = new uint256[](count);
+        uint256 j;
+        for (uint256 i = 0; i < taskCount; i++) {
+            if (tasks[i].status == Status.Created && tasks[i].agent == address(0)) openIds[j++] = i;
+        }
     }
 
     /// @notice Agent submits deliverable evidence (e.g. repo URL + commit
@@ -555,6 +624,11 @@ contract TaskPay is ReentrancyGuard, Ownable {
     }
 
     function getAgentRatingSummary(address agent) external view returns (uint256 totalScore, uint256 count) {
+        (totalScore, count) = _ratingSummary(agent);
+    }
+
+    /// @dev Shared rating math for the view and the accept-time guard.
+    function _ratingSummary(address agent) internal view returns (uint256 totalScore, uint256 count) {
         Rating[] storage ratings = agentRatings[agent];
         count = ratings.length;
         uint256 acc;

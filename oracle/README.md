@@ -16,6 +16,7 @@ when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
 | `ChallengeRaised(taskId)` event | Runs the **Senior Arbiter** agent on the full dispute trail (spec, prior verdicts + reasoning, tentative outcome, challenge) and submits the **binding** verdict |
 | Periodic scan (all tasks by ID) | Auto-calls permissionless expiry transitions: `finalizeAfterReview` (requester silent → agent paid), `finalizeAfterChallenge`, `resolveAfterSeniorArbiterTimeout`. Logs stalled disputes that need the requester's `refundAfterStalledDispute` |
 | `POST /v1/quote` + `POST /v1/send` (same HTTP server) | **Sponsor bundler** (ERC-4337 v0.7): the oracle builds a sponsored UserOp for a user's SimpleAccount (`quote`), then simulates and broadcasts `handleOps` (`send`). The paymaster deposit in the EntryPoint covers gas, so users pay nothing |
+| `AGENT_BOT_PRIVATE_KEY` set (daemon tick) | **Autonomous agent bot**: accepts tasks created for its smart account, verifies the archived spec against the on-chain `specHash`, generates a real deliverable with Groq, and submits it — every op sponsored by the same paymaster, so the bot pays no gas either |
 
 ## Operating principles
 
@@ -38,6 +39,13 @@ when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
 6. **Reasoning is archived off-chain, hashed on-chain.** TaskPay anchors
    `keccak(reasoningText)` in the verdict; the full text is written under
    `data/reasoning/{chainId}/{taskId}.{role}.json` for the frontend to render.
+7. **A hung RPC can only skip a cycle, never kill the daemon.** The bot tick
+   and the deadline scan are timeout-guarded (`lib/concurrency.ts`
+   `withTimeout`), so a stalled public-RPC call resets the `busy`/`scanning`
+   guard and the next tick runs — it can never wedge the loop permanently.
+8. **Logs are real-time.** The logger writes synchronously (`fs.writeSync`,
+   not `console.*`) — redirected stdout buffers on some hosts (Windows), which
+   made a healthy daemon look wedged and hid the last error of a stuck one.
 
 ## Layout
 
@@ -63,6 +71,8 @@ oracle/
 │   │   ├── routes.ts           # /v1/quote + /v1/send HTTP handlers
 │   │   └── abi/                # EntryPoint/Factory/Paymaster/SimpleAccount ABIs
 │   ├── github/fetch.ts         # repo-at-pinned-commit fetcher (size-capped, cached)
+│   ├── bot/agent.ts            # autonomous worker persona (optional; see below)
+│   ├── monitor/paymaster.ts    # EntryPoint deposit watcher (exposed on /health)
 │   ├── pipeline/
 │   │   ├── context.ts          # task → DeliverableContext (repo or plain text)
 │   │   ├── handleDispute.ts    # quorum flow (Reviewer/Fraud/Arbiter → resolve)
@@ -75,9 +85,9 @@ oracle/
 │   │   ├── reasoning.ts        # verdict reasoning text
 │   │   └── specs.ts            # task spec text keyed to on-chain specHash
 │   └── lib/
-│       ├── logger.ts           # structured JSON logging
+│       ├── logger.ts           # real-time structured JSON logging (sync writes)
 │       ├── txMutex.ts          # serializes oracle-wallet sends
-│       └── concurrency.ts      # bounded mapWithConcurrency
+│       └── concurrency.ts      # bounded mapWithConcurrency + withTimeout race helper
 ```
 
 ## Operation
@@ -115,6 +125,43 @@ popup, zero gas) → `/v1/send` simulates with `eth_call` and broadcasts
 deposit. See the gasless sections in the repo README and `scripts/live_gasless.mjs`
 for a full worked lifecycle.
 
+### Autonomous agent bot
+
+Setting `AGENT_BOT_PRIVATE_KEY` in taskpay/.env makes the oracle also run a
+self-operating worker (`src/bot/agent.ts`) — a distinct on-chain identity from
+the oracle operator. Each poll tick it lists tasks where its factory-derived
+SimpleAccount (salt 0) is the designated agent **plus every task in the open
+pool** (`getOpenTasks`) — open tasks are also claimed the moment their
+`TaskCreated` event lands in a polled block (`index.ts` wires the hook; the
+tick is the fallback) — and for each candidate task:
+
+1. **Created + accept window open** → it accepts, but only after verifying the
+   archived spec text (`data/specs/<chainId>/<taskId>.json`) hashes to the
+   task's on-chain `specHash` — a forged or stale archive row is declined, never
+   worked on — after a keyword profile check (`AGENT_BOT_ACCEPT_ALL` bypasses
+   the profile), and after pre-checking any `minRating` reputation floor on
+   open tasks (v3) so it never spends a sponsored op on a guaranteed revert
+   (the floor is re-evaluated each tick, not sticky, so newly earned ratings
+   unlock still-open gated work).
+2. **Accepted** → it reads the spec, generates a real deliverable with Groq, and
+   submits it. Deliverables are capped at 2,000 chars because the submission
+   text is stored on-chain (the bundler's gas headroom is sized for that), and
+   a `max_tokens` cut-off is refused rather than submitted truncated.
+
+Every action goes through the same sponsored gasless path as the UI
+(`buildQuote` + `sendUserOp`), so the bot pays no gas. A failing task is logged
+with its taskId and never aborts the rest of the batch, and accept/submit are
+idempotent across restarts — after an on-chain revert the bot re-reads the
+status and treats an already-transitioned task as a no-op.
+
+Designate the bot's account as the **Agent** on `/create` to have it do the
+work (`scripts/live_agent_bot.mjs` drives the full requester-side lifecycle
+against it), or post an **open task** and let it race for the claim
+(`scripts/live_open_task.mjs` posts one with a `minRating` floor and watches
+the event hook win the race). Env knobs: `AGENT_BOT_NAME`,
+`AGENT_BOT_POLL_SECONDS`, `AGENT_BOT_MODEL`, `AGENT_BOT_ACCEPT_ALL` — see
+`.env.example`.
+
 ## Deliverable evidence model
 
 TaskPay's `submission` field is free-form. The oracle treats a submission as
@@ -138,9 +185,14 @@ the agents verbatim as text evidence.
   archived by the frontend before a challenge is escalated.
 - **The bundler sponsors every UserOp it can simulate.** `eth_call` on
   `handleOps` is the gate: invalid signatures, unfunded escrow, or calls to
-  other contracts revert in simulation and are never broadcast. The paymaster
-  deposit is the only real cost ceiling — top it up via
-  `paymaster.deposit{value: …}()` when low.
+  other contracts revert in simulation and are never broadcast. Two extra
+  guards apply after that gate: each op is built with generous execution-gas
+  headroom (2M call gas — `submitWork` stores its text on-chain at ~22k gas
+  per 32-byte word, and 250k silently ran out of gas), and after broadcasting,
+  `sendUserOp` checks the EntryPoint's `UserOperationEvent.success` flag —
+  v0.7 catches execution failures, so a tx that mines with status 1 can still
+  hide a reverted inner call. The paymaster deposit is the only real cost
+  ceiling — top it up via `paymaster.deposit{value: …}()` when low.
 - **BOT Chain has base fee 0 and a fixed gas price**, so UserOps use legacy
   fee mode (equal max/priority fees) and `handleOps` is broadcast as a type-0
   tx. EntryPoint bytecode on 968 is byte-identical to mainnet's canonical

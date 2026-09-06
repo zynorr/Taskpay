@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import StatusBadge from "@/components/StatusBadge";
 import TaskActions from "@/components/TaskActions";
+import DeliverableText from "@/components/DeliverableText";
 import {
   ArrowLeft,
   ArrowRight,
@@ -19,7 +20,7 @@ import {
   ShieldCheck,
   Star,
 } from "@/components/icons";
-import { fetchTask, fetchVerdicts, fetchDispute, fetchAgentRating } from "@/lib/tasks";
+import { fetchTask, fetchVerdicts, fetchDispute, fetchAgentRating, fetchMinRating } from "@/lib/tasks";
 import { Status } from "@/lib/contract";
 import {
   shortAddress,
@@ -291,6 +292,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const [reasoning, setReasoning] = useState<ReasoningRow[]>([]);
   const [disputeReason, setDisputeReason] = useState<string | null>(null);
   const [rating, setRating] = useState<{ totalScore: bigint; count: bigint } | null>(null);
+  const [minRating, setMinRating] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -311,7 +313,11 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
       setTask(t);
       setVerdicts(v);
       setDispute(d);
-      fetchAgentRating(t.agent).then((r) => setRating(r));
+      // No rating fetch for unclaimed (open) tasks — nothing to rate yet.
+      if (t.agent !== "0x0000000000000000000000000000000000000000") {
+        fetchAgentRating(t.agent).then((r) => setRating(r));
+      }
+      fetchMinRating(taskId).then((m) => setMinRating(m));
 
       try {
         const specRes = await fetch(`/api/specs/${taskId}`);
@@ -440,7 +446,13 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           <div className="flex items-center gap-2.5">
             <PartyLink address={task.requester} />
             <ArrowRight size={13} className="text-faint" />
-            <PartyLink address={task.agent} />
+            {task.agent === "0x0000000000000000000000000000000000000000" ? (
+              <span className="rounded-md border border-accent-line bg-accent-soft px-2 py-1 text-[11px] font-medium text-accent">
+                Open — first agent to claim
+              </span>
+            ) : (
+              <PartyLink address={task.agent} />
+            )}
           </div>
         </div>
 
@@ -449,13 +461,25 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             <PartyLink address={task.requester} />
           </Field>
           <Field label="Agent">
-            <span className="inline-flex flex-wrap items-center">
-              <PartyLink address={task.agent} />
-              <ProfileChip address={task.agent} />
-            </span>
+            {task.agent === "0x0000000000000000000000000000000000000000" ? (
+              <span className="text-[13px] text-accent">
+                {minRating > 0
+                  ? `Open — requires ${minRating}+ rating`
+                  : "Unclaimed — open to any agent"}
+              </span>
+            ) : (
+              <span className="inline-flex flex-wrap items-center">
+                <PartyLink address={task.agent} />
+                <ProfileChip address={task.agent} />
+              </span>
+            )}
           </Field>
           <Field label="Agent rating">
-            <Rating avg={avgRating} count={rating?.count ?? 0n} />
+            {task.agent === "0x0000000000000000000000000000000000000000" ? (
+              <span className="text-[13px] text-faint">—</span>
+            ) : (
+              <Rating avg={avgRating} count={rating?.count ?? 0n} />
+            )}
           </Field>
           <Field label="Spec hash">
             <CopyValue value={fullHash(task.specHash)} label={shortHash(task.specHash) || "—"} />
@@ -515,19 +539,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             <Package size={15} className="text-accent" /> Deliverable
           </h2>
           {task.submission ? (
-            <div className="space-y-2">
-              <p className="break-all text-[13px] leading-relaxed text-mute">{task.submission}</p>
-              {/^https?:\/\//.test(task.submission.trim()) && (
-                <a
-                  href={task.submission.trim()}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 text-xs text-accent underline-offset-2 hover:underline"
-                >
-                  Open link <ArrowUpRight size={12} />
-                </a>
-              )}
-            </div>
+            <DeliverableText text={task.submission.trim()} />
           ) : (
             <p className="text-[13px] text-faint">No deliverable submitted yet.</p>
           )}

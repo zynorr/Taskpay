@@ -10,6 +10,8 @@ export interface TaskView {
   acceptDeadline: bigint;
   workDeadline: bigint;
   reviewDeadline: bigint;
+  /** Reputation floor for open tasks (0 = none). Pre-v3 reads fall back to 0. */
+  minRating?: number;
 }
 
 export interface VerdictView {

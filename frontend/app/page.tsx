@@ -9,15 +9,24 @@ import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
 import { formatAmount } from "@/lib/format";
 
-type Filter = "all" | "active" | "disputed" | "settled" | "mine";
+type Filter = "all" | "open" | "active" | "disputed" | "settled" | "mine";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "All" },
+  { key: "open", label: "Open" },
   { key: "active", label: "Active" },
   { key: "disputed", label: "Disputes" },
   { key: "settled", label: "Settled" },
   { key: "mine", label: "Mine" },
 ];
+
+// Open tasks are claimable by anyone; gated ones carry a minRating floor.
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+const isOpenTask = (t: TaskView) => t.agent === ZERO_ADDRESS && t.status === Status.Created;
+
+// Rating-floor selector: null = no floor filtering, N = only open tasks whose
+// requirement is at least N (agents hunting gated work filter up from 1+).
+const FLOOR_LEVELS = [1, 2, 3, 4, 5];
 
 function isActive(s: number) {
   return s >= Status.Created && s <= Status.Submitted;
@@ -40,6 +49,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<Filter>("all");
+  const [minFloor, setMinFloor] = useState<number | null>(null);
   const [myAddrs, setMyAddrs] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(PAGE_STEP);
@@ -128,22 +138,27 @@ export default function HomePage() {
   }, [tasks]);
 
   const filtered = useMemo(() => {
-    // fetchLatestPage returns newest-first; keep that ordering.
-    const list = tasks;
-    if (filter === "active") return list.filter((t) => isActive(t.status));
-    if (filter === "disputed") return list.filter((t) => isDisputed(t.status));
-    if (filter === "settled") return list.filter((t) => isTerminal(t.status));
+    // fetchLatestPage returns newest-first; keep that ordering. The floor
+    // selector applies first (it only matches unclaimed open tasks), then the
+    // active tab narrows further.
+    const floored =
+      minFloor === null ? tasks : tasks.filter((t) => isOpenTask(t) && (t.minRating ?? 0) >= minFloor);
+    if (filter === "open") return floored.filter((t) => isOpenTask(t));
+    if (filter === "active") return floored.filter((t) => isActive(t.status));
+    if (filter === "disputed") return floored.filter((t) => isDisputed(t.status));
+    if (filter === "settled") return floored.filter((t) => isTerminal(t.status));
     if (filter === "mine")
-      return list.filter(
+      return floored.filter(
         (t) =>
           myAddrs.includes(t.requester.toLowerCase()) || myAddrs.includes(t.agent.toLowerCase()),
       );
-    return list;
-  }, [tasks, filter, myAddrs]);
+    return floored;
+  }, [tasks, filter, minFloor, myAddrs]);
 
   const counts: Record<Filter, number> = useMemo(
     () => ({
       all: tasks.length,
+      open: tasks.filter((t) => isOpenTask(t)).length,
       active: tasks.filter((t) => isActive(t.status)).length,
       disputed: tasks.filter((t) => isDisputed(t.status)).length,
       settled: tasks.filter((t) => isTerminal(t.status)).length,
@@ -154,6 +169,11 @@ export default function HomePage() {
     }),
     [tasks, myAddrs],
   );
+
+  // Per-level counts for the floor chips: how many unclaimed open tasks
+  // require at least N. Hidden entirely when no open tasks exist.
+  const openTasks = tasks.filter((t) => isOpenTask(t));
+  const floorCount = (n: number) => openTasks.filter((t) => (t.minRating ?? 0) >= n).length;
 
   const statItems = [
     { label: "Tasks posted", value: String(stats.total) },
@@ -214,33 +234,71 @@ export default function HomePage() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                setRefreshing(true);
-                load(visibleLimit).finally(() => setRefreshing(false));
-              }}
-              className="btn-secondary btn-sm !px-2.5"
-              title="Refresh now"
-            >
-              <Refresh size={13} className={refreshing ? "animate-spin" : ""} />
-            </button>
-            <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-subtle p-0.5">
-              {FILTERS.map((f) => (
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setRefreshing(true);
+                  load(visibleLimit).finally(() => setRefreshing(false));
+                }}
+                className="btn-secondary btn-sm !px-2.5"
+                title="Refresh now"
+              >
+                <Refresh size={13} className={refreshing ? "animate-spin" : ""} />
+              </button>
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-subtle p-0.5">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.key}
+                    onClick={() => setFilter(f.key)}
+                    className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition ${
+                      filter === f.key
+                        ? "bg-subtleH text-fg"
+                        : "text-mute hover:text-fg"
+                    }`}
+                  >
+                    {f.label}
+                    <span className="ml-1.5 font-mono text-[10px] text-faint tnum">{counts[f.key]}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+            {openTasks.length > 0 && (
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                title="Filter open tasks by the rating their claimer needs — N+ shows tasks requiring at least N"
+              >
+                <span className="micro">Claim floor</span>
                 <button
-                  key={f.key}
-                  onClick={() => setFilter(f.key)}
-                  className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition ${
-                    filter === f.key
-                      ? "bg-subtleH text-fg"
-                      : "text-mute hover:text-fg"
+                  onClick={() => setMinFloor(null)}
+                  className={`rounded-lg border px-2 py-1 font-mono text-[11px] transition ${
+                    minFloor === null
+                      ? "border-accent-line bg-accent-soft text-accent"
+                      : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
                   }`}
                 >
-                  {f.label}
-                  <span className="ml-1.5 font-mono text-[10px] text-faint tnum">{counts[f.key]}</span>
+                  any
                 </button>
-              ))}
-            </div>
+                {FLOOR_LEVELS.map((n) => {
+                  const c = floorCount(n);
+                  if (c === 0 && minFloor !== n) return null;
+                  return (
+                    <button
+                      key={n}
+                      onClick={() => setMinFloor(minFloor === n ? null : n)}
+                      className={`rounded-lg border px-2 py-1 font-mono text-[11px] transition tnum ${
+                        minFloor === n
+                          ? "border-accent-line bg-accent-soft text-accent"
+                          : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
+                      }`}
+                    >
+                      {n}+
+                      <span className="ml-1 text-[9px] text-faint">{c}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
 
@@ -260,7 +318,11 @@ export default function HomePage() {
           <div className="panel flex flex-col items-center gap-2 px-6 py-16 text-center">
             <ShieldCheck size={28} className="text-faint" />
             <p className="text-sm font-medium text-fg">
-              {filter === "mine" ? "No tasks involving your accounts yet." : "No tasks in this view."}
+              {filter === "mine"
+                ? "No tasks involving your accounts yet."
+                : filter === "open" && minFloor !== null
+                  ? `No open tasks requiring a ${minFloor}+ rating.`
+                  : "No tasks in this view."}
             </p>
             <p className="max-w-sm text-xs text-faint">
               {filter === "mine"

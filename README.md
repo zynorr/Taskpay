@@ -15,6 +15,10 @@ of three paths:
 Every action is a **sponsored ERC-4337 UserOp** — users sign once and pay zero gas. Every settled
 task leaves a one-per-task on-chain reputation record that any downstream application can read.
 
+TaskPay also ships its own **autonomous agent** (the "bot"): a self-operating worker that runs
+inside the oracle, accepts tasks posted to it, and submits real Groq-generated deliverables — so
+the marketplace always has a live worker and the gasless flow is exercised end to end.
+
 ## What problem it solves
 
 BOT Chain is shipping agent infrastructure — on-chain identity, dedicated agent wallets, native
@@ -40,6 +44,7 @@ flowchart TB
     POLL["event poller + deadline scanner"]
     AI["AI agents on Groq —<br/>Reviewer · FraudSanity · Arbiter · Senior Arbiter"]
     BUN["ERC-4337 sponsor bundler<br/>/v1/quote · /v1/send + paymaster signer"]
+    BOT["agent bot — accepts · works · submits"]
   end
   subgraph CH["BOT Chain (testnet 968)"]
     TP["TaskPay.sol —<br/>escrow · status · verdicts · reputation"]
@@ -49,6 +54,7 @@ flowchart TB
   ARC["file archive data/ —<br/>spec text · reasoning text"]
 
   UI -->|signed UserOp| BUN
+  BOT -->|signed UserOp| BUN
   BUN -->|handleOps, gas from paymaster| EP
   EP --> SA --> TP
   TP -->|DisputeRaised / ChallengeRaised events| POLL
@@ -57,6 +63,7 @@ flowchart TB
   POLL -->|auto-finalize past deadlines| TP
   UI -->|reads on-chain state| TP
   UI -->|serves / reads| ARC
+  BOT -->|reads spec + delivers| ARC
 ```
 
 **On-chain vs off-chain.** The contract stores only what must be tamper-proof and readable by
@@ -70,16 +77,16 @@ anchored on-chain by its hash, so an archived row can always be verified against
 | Component | Role | Stack |
 |---|---|---|
 | `src/TaskPay.sol` | Settlement contract: escrow, lifecycle, dispute state machine, reputation, optional protocol fee | Solidity 0.8.24, OpenZeppelin (ReentrancyGuard, Ownable) |
-| `oracle/` | Off-chain service: watches the contract, runs AI agents on disputes, auto-calls deadline transitions, doubles as the sponsor bundler | TypeScript, ethers, Groq SDK, tsx |
-| `frontend/` | Marketplace + task detail + create flow + reasoning archive UI | Next.js App Router, wagmi/viem, Geist |
-| `script/`, `scripts/` | Forge deploy scripts + end-to-end lifecycle drivers | Solidity (forge), Node |
+| `oracle/` | Off-chain service: watches the contract, runs the AI dispute agents, auto-calls deadline transitions, sponsors every gasless action as the bundler, and can host the autonomous agent bot | TypeScript, ethers, Groq SDK, tsx |
+| `frontend/` | Marketplace + create flow + task detail + reasoning archive + agent profiles | Next.js App Router, wagmi/viem, Geist |
+| `script/`, `scripts/` | Forge deploy scripts + Node end-to-end lifecycle drivers (human *and* bot) | Solidity (forge), Node |
 
 ### Contract: lifecycle & statuses
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Created : createTask · escrow locked
-    Created --> Accepted : acceptTask (agent)
+    [*] --> Created : createTask / createOpenTask · escrow locked
+    Created --> Accepted : acceptTask (agent — open tasks: first claimer wins)
     Created --> Cancelled : cancelOpenTask (requester)
     Created --> Refunded : reclaimAfterDeadline (requester)
     Accepted --> Submitted : submitWork
@@ -104,6 +111,21 @@ timeouts) are permissionless so anyone can unblock a worker's payment; refund-to
 are gated to the requester. If the oracle is down, funds still move — deadlines are enforced by
 the contract, not by uptime.
 
+### Task modes: designated & open
+
+A task either names its agent or is posted to the open pool:
+
+- **Designated** (`createTask(agent, …)`): the requester picks the counterparty — the create
+  flow warns about low-rated/dispute-heavy agents before escrow is locked. Only that account
+  can `acceptTask`.
+- **Open** (`createTask(address(0), …)` or `createOpenTask(…, minRating)`): any agent claims by
+  calling `acceptTask`; the first transaction to find the task still `Created` wins and the
+  losers revert — no locking mechanism, the chain serializes the race. `getOpenTasks()` exposes
+  the claimable pool. An optional `minRating` floor (1–5) blocks claimers whose floored
+  on-chain average rating is below it — unrated agents fail any floor ≥ 1, so reputation is
+  earned before gated work unlocks. Floors only gate open tasks: designated agents are
+  hand-picked, and that vetting is the requester's own.
+
 ### Design decisions
 
 | Decision | Choice |
@@ -111,11 +133,46 @@ the contract, not by uptime.
 | Judge | Requester-first; **AI agents only run when a dispute is raised**, so happy-path tasks cost zero oracle/AI fees |
 | Silent requester | **Auto-finalize pays the agent** after the review period — requester inaction can never strand a worker's payment |
 | Escalation | 2-of-3 quorum first (Reviewer + FraudSanity; Arbiter on a split); the losing party can escalate to a **binding Senior Arbiter** ruling |
-| Acceptance | Designated agent + accept window (no open bidding — the requester names their counterparty) |
+| Acceptance | Two modes: **designated agent** (requester names their counterparty) or **open task** — any agent claims via `acceptTask`, first come first served, serialized by the chain; open tasks can set a **minimum on-chain rating** as a claim floor |
 | Stuck funds | Every window has an expiry owner: requester reclaims a no-show, anyone can finalize a delivered task, `refundAfterStalledDispute` exits a stalled dispute |
 | Fees | Optional protocol fee (default 0, max 5%) charged **only on worker payout** — refunds are never taxed |
 | Reputation | One 1–5 rating + released-task count per agent, stored on-chain and readable by any app |
 | Gas | **Gasless-only UX**: every write is a sponsored UserOp; the wallet's only job is signing one hash |
+| Dogfooding | The oracle can run an **autonomous agent bot** so agent work on TaskPay is demonstrated by a real, always-on worker |
+
+## Autonomous agent bot
+
+The oracle can adopt an extra wallet (`AGENT_BOT_PRIVATE_KEY`) and run a **self-operating worker** —
+a distinct on-chain identity whose TaskPay role is the factory-derived SimpleAccount of that key
+(salt 0, the same derivation every user gets). Post a task with that account as the **Agent** on
+`/create` and the bot does the work:
+
+1. **Accept.** Each poll tick it lists tasks where it is the designated agent (`getTasksFor`)
+   **plus every task in the open pool** (`getOpenTasks`), so it also plays the first-come,
+   first-served game: open tasks are additionally claimed the moment their `TaskCreated` event
+   lands in a polled block (event hook first, poll tick as the fallback). Before claiming, it
+   verifies the archived spec text (`data/specs/<chainId>/<taskId>.json`) **hashes to the task's
+   on-chain `specHash`** — a forged or stale archive row is declined, never worked on — checks a
+   keyword profile unless `AGENT_BOT_ACCEPT_ALL=true`, and pre-checks any `minRating` floor so
+   it never burns a sponsored op on a guaranteed revert. Then it claims, gasless.
+2. **Work.** It asks Groq for the actual deliverable the spec asks for and submits it
+   (`submitWork`). Deliverables are capped at 2,000 characters because the submission text is
+   stored on-chain; a response cut off by `max_tokens` is refused rather than submitted truncated.
+3. **Settle like anyone.** The requester reviews the submission and releases + rates as usual. The
+   bot earns its own on-chain rating, and disputes over its work go through the normal AI pipeline.
+
+Every bot action is a sponsored UserOp through the same bundler the frontend uses, so **the bot
+pays no gas either**. The daemon is built to stay out of the way when idle and to self-heal when
+things go wrong: one failing task is logged with its taskId and never aborts the batch, accept and
+submit are idempotent across restarts (after an on-chain revert it re-reads the status and treats
+an already-transitioned task as a no-op), and every tick is timeout-guarded so a stalled RPC can
+only skip a cycle, never wedge the daemon.
+
+To run it yourself, set `AGENT_BOT_PRIVATE_KEY` (plus optional `AGENT_BOT_NAME`,
+`AGENT_BOT_POLL_SECONDS`, `AGENT_BOT_MODEL`, `AGENT_BOT_ACCEPT_ALL`) in `taskpay/.env`. The live
+testnet deployment and the address to designate on `/create` are in `DEPLOY.md` and
+`docs/TESTNET-GUIDE.md`; `scripts/live_agent_bot.mjs` drives the whole requester-side lifecycle
+against a running bot.
 
 ## Repository layout
 
@@ -136,23 +193,30 @@ taskpay/
 │   └── DeployAA.s.sol         # account-abstraction deploy (factory + paymaster)
 ├── scripts/                   # Node end-to-end drivers against a live network
 │   ├── live_gasless.mjs       #   sponsored create → accept → submit → release
+│   ├── live_agent_bot.mjs     #   full lifecycle against the autonomous agent bot
 │   ├── gasless_http_e2e.mjs   #   the exact HTTP path the frontend uses
-│   └── gasless_dispute_lifecycle.mjs  # full lifecycle incl. dispute + appeal
+│   ├── gasless_dispute_lifecycle.mjs  # full lifecycle incl. dispute + appeal
+│   └── verify_contract.mjs
 ├── oracle/                    # off-chain service (see oracle/README.md)
 │   └── src/
 │       ├── agents/            #   Groq AI roles (reviewer, fraudSanity, arbiter, seniorArbiter)
 │       ├── bundler/           #   ERC-4337 sponsor bundler (/v1/quote, /v1/send)
+│       ├── bot/               #   autonomous agent daemon (optional; see above)
+│       ├── monitor/           #   paymaster deposit watcher (exposed on /health)
 │       ├── pipeline/          #   dispute → quorum → resolve; challenge → senior arbiter
-│       ├── store/             #   file-backed reasoning + spec archive
+│       ├── verdict/ store/    #   tx-locked verdict submission + file-backed archives
 │       └── contract/          #   typed reads, event poller
 ├── frontend/                  # Next.js app (see frontend/README.md)
-│   ├── app/                   #   pages (/, /create, /task/[id]) + /api routes
+│   ├── app/                   #   pages (/, /create, /task/[id], /agent/[address]) + /api routes
 │   └── components/ lib/       #   UI + wagmi config, typed contract access
 ├── data/                      # file archive (shared by oracle + frontend)
 │   ├── specs/{chain}/{id}.json        # task spec text + name (hash is on-chain)
-│   └── reasoning/{chain}/{id}.{role}.json  # AI verdict reasoning
+│   ├── reasoning/{chain}/{id}.{role}.json  # AI verdict reasoning
+│   ├── disputes/{chain}/{id}.json     # requester dispute reasons
+│   └── poller-cursor.json             # event poller resume point
+├── docs/                      # TESTNET-GUIDE.md + project notes
 ├── DEPLOY.md                  # deployment guide (testnet 968 / mainnet 677)
-└── .env.example               # shared env template (contract, RPC, oracle keys, AA stack)
+└── .env.example               # shared env template (contract, RPC, oracle keys, AA stack, bot)
 ```
 
 ## Getting started
@@ -166,7 +230,7 @@ forge test                # unit + fuzz + invariant suites
 forge test --match-path test/TaskPay.t.sol   # fast loop: unit only
 ```
 
-**Run the oracle** (AI dispute agents + sponsor bundler; env from `taskpay/.env`):
+**Run the oracle** (dispute agents + sponsor bundler + optional agent bot; env from `taskpay/.env`):
 
 ```bash
 cd oracle
@@ -182,8 +246,8 @@ npm install
 npm run dev               # http://localhost:3000
 ```
 
-See `oracle/README.md` and `frontend/README.md` for full configuration, and `DEPLOY.md` for
-deploying the contracts.
+See `oracle/README.md` and `frontend/README.md` for full configuration, `DEPLOY.md` for deploying
+the contracts, and `scripts/live_agent_bot.mjs` for driving the autonomous bot end to end.
 
 ## Sponsoring gas (ERC-4337)
 
@@ -196,9 +260,20 @@ A TaskPay action therefore costs the user **nothing** — the flow is: frontend 
 call → the oracle's `/v1/quote` assembles a gas-filled, paymaster-signed UserOp and returns the
 hash to sign → the wallet signs (one popup) → `/v1/send` simulates and broadcasts `handleOps`.
 Roles on-chain are the participants' **smart accounts**, so identity and gasless execution are the
-same mechanism. The one exception is the initial escrow deposit, which a user sends to their own
+same mechanism — including for the agent bot, whose smart account does its accepting, working, and
+submitting. The one exception is the initial escrow deposit, which a user sends to their own
 account from their wallet — a smart account cannot sponsor the very first transfer that funds it,
 and the app never broadcasts transactions itself.
+
+Two details that keep sponsored ops honest on a chain where execution can fail quietly:
+
+- **Gas headroom for on-chain text.** `submitWork` stores the full submission string in the task
+  struct (~22k gas per 32-byte word), so the bundler sizes every op with generous execution gas
+  (2M) rather than the 250k that would silently run out of gas on a text-bearing call.
+- **Op-success verification after broadcast.** ERC-4337 v0.7 *catches* execution-phase failures —
+  a reverted inner call still mines the transaction with status 1. After each broadcast the bundler
+  therefore checks the EntryPoint's `UserOperationEvent.success` flag for the sender and fails loud
+  if the op did not actually execute, instead of reporting a phantom success.
 
 ## License
 

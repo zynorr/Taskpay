@@ -1,6 +1,20 @@
 [
   {
     "type": "event",
+    "name": "TaskCreated",
+    "inputs": [
+      { "name": "taskId", "type": "uint256", "indexed": true },
+      { "name": "requester", "type": "address", "indexed": true },
+      { "name": "agent", "type": "address", "indexed": true },
+      { "name": "amount", "type": "uint256", "indexed": false },
+      { "name": "specHash", "type": "bytes32", "indexed": false },
+      { "name": "acceptWindow", "type": "uint256", "indexed": false },
+      { "name": "workDuration", "type": "uint256", "indexed": false },
+      { "name": "reviewPeriod", "type": "uint256", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
     "name": "TaskSubmitted",
     "inputs": [
       { "name": "taskId", "type": "uint256", "indexed": true },

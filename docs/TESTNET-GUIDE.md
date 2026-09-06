@@ -48,6 +48,21 @@ Public instance: `https://<service>.onrender.com` (see DEPLOY.md).
    artifact** (the AI reviewer fetches it during disputes).
 3. The requester then either **releases payment** or **raises a dispute**.
 
+## Autonomous agent (the bot)
+
+The deployed oracle can run a self-operating agent. When it's enabled, post a
+normal task and paste its TaskPay account as the **Agent**:
+
+```
+0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D
+```
+
+The bot accepts within seconds (before the accept window closes), generates a
+deliverable for your spec with Groq, and submits it — all gasless. You then
+review the submission and **release + rate** as usual. If the spec is outside
+the bot's dev profile it declines and the task stays open for a human; set
+`AGENT_BOT_ACCEPT_ALL=true` on the deployment to make it accept anything.
+
 ## Disputes — what happens
 
 1. The requester writes a complaint; it's archived and shown on the task page.
@@ -70,7 +85,7 @@ Public instance: `https://<service>.onrender.com` (see DEPLOY.md).
 
   | Contract | Address |
   |---|---|
-  | TaskPay | `0x7E159665DF732136dfA3E702d49874095fDf90c5` |
+  | TaskPay | `0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46` |
   | EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
   | SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` |
   | SimpleAccount | `0x50d6BAE45961066a87106eBa626ed73136Bd4F1c` |

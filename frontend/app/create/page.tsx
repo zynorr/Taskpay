@@ -15,6 +15,7 @@ import {
   fetchTaskHistory,
   fetchAgentCompletedCount,
   fetchDisputedTaskIds,
+  contractSupportsRatingFloor,
 } from "@/lib/tasks";
 import { smartAccountOf, bundlerUrl } from "@/lib/aa";
 import {
@@ -42,6 +43,11 @@ const ACCEPT_OPTIONS = [600, 3600, 21600, 86400];
 const WORK_OPTIONS = [3600, 21600, 86400, 259200, 604800];
 const REVIEW_OPTIONS = [3600, 86400, 259200, 604800];
 const AMOUNT_CHIPS = ["0.01", "0.05", "0.1", "0.5"];
+
+// Open tasks leave the agent unset on-chain; acceptTask fills in msg.sender,
+// so the chain itself enforces first-come-first-served.
+const OPEN_AGENT = "0x0000000000000000000000000000000000000000";
+const RATING_OPTIONS = [0, 1, 2, 3, 4, 5];
 
 function DurationSelect({
   label,
@@ -86,6 +92,11 @@ export default function CreateTaskPage() {
   const router = useRouter();
 
   const [agent, setAgent] = useState("");
+  const [openTask, setOpenTask] = useState(false);
+  const [minRating, setMinRating] = useState(0);
+  // v3+ only: floors live in createOpenTask. On v2, floor 0 still works via
+  // createTask(0x0); floor > 0 is offered but fails on-chain — so gate it.
+  const [floorSupported, setFloorSupported] = useState(true);
   const [taskName, setTaskName] = useState("");
   const [specText, setSpecText] = useState("");
   const [amount, setAmount] = useState("0.01");
@@ -102,7 +113,19 @@ export default function CreateTaskPage() {
 
   const bundlerOnline = Boolean(bundlerUrl());
 
+  useEffect(() => {
+    let alive = true;
+    contractSupportsRatingFloor()
+      .then((ok) => alive && setFloorSupported(ok))
+      .catch(() => alive && setFloorSupported(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const agentValid = /^0x[0-9a-fA-F]{40}$/.test(agent);
+  // Open tasks don't name an agent — nothing to validate.
+  const agentReady = openTask || agentValid;
   const amountWei = useMemo(() => {
     try {
       return parseEther(amount || "0");
@@ -173,8 +196,12 @@ export default function CreateTaskPage() {
     setError(null);
     setCreated(null);
 
-    if (!agentValid) {
-      setError("Enter a valid 0x agent address.");
+    if (!openTask && !agentValid) {
+      setError("Enter a valid 0x agent address — or switch to Open to any agent.");
+      return;
+    }
+    if (openTask && minRating > 0 && !floorSupported) {
+      setError("The deployed contract doesn't support minimum-rating floors yet — post with 'Any' for now.");
       return;
     }
     if (!taskName.trim()) {
@@ -198,13 +225,18 @@ export default function CreateTaskPage() {
       return;
     }
 
-    const args = [
-      agent.trim(),
-      specHashOf(specText.trim()),
-      BigInt(acceptWindow),
-      BigInt(workDuration),
-      BigInt(reviewPeriod),
-    ] as const;
+    const specHash = specHashOf(specText.trim());
+    const windows = [BigInt(acceptWindow), BigInt(workDuration), BigInt(reviewPeriod)] as const;
+    // Open tasks go through createOpenTask (agent unset + reputation floor);
+    // designated tasks keep the createTask(agent, ...) shape.
+    // Floor 0 open tasks use the classic createTask(0x0) — identical on-chain
+    // semantics, so it also works on pre-v3 deployments.
+    const fnName = openTask && (minRating > 0 || floorSupported) ? "createOpenTask" : "createTask";
+    const args = openTask && (minRating > 0 || floorSupported)
+      ? [specHash, ...windows, BigInt(minRating)]
+      : openTask
+        ? [OPEN_AGENT, specHash, ...windows]
+        : [agent.trim(), specHash, ...windows];
 
     setBusy(true);
     try {
@@ -212,7 +244,7 @@ export default function CreateTaskPage() {
       // below must never be emptied by the state resets that follow.
       const name = taskName.trim();
       const spec = specText.trim();
-      const res = await writeGasless("createTask", args, { value: amountWei });
+      const res = await writeGasless(fnName, args, { value: amountWei });
       // The receipt's TaskCreated event is authoritative; the count read is a
       // fallback for a lagging RPC node (and would otherwise point at the
       // previous task).
@@ -367,26 +399,90 @@ export default function CreateTaskPage() {
           {/* Agent */}
           <section className="space-y-3">
             <SectionTitle step="01">Agent</SectionTitle>
-            <div>
-              <label className="label">TaskPay account address</label>
-              <input
-                className={`input font-mono ${agent && !agentValid ? "!border-bad-line" : ""}`}
-                placeholder="0x…"
-                value={agent}
-                onChange={(e) => setAgent(e.target.value)}
-                spellCheck={false}
-              />
-              <p className="mt-1.5 text-[11px] text-faint">
-                The agent acts with sponsored gas from its TaskPay account. Paste its wallet address
-                below and use the suggested account, or paste an account address directly.
-              </p>
-              {agent && !agentValid && (
-                <p className="mt-1.5 text-xs text-bad">
-                  That does not look like a valid address (0x + 40 hex characters).
-                </p>
-              )}
-              {agentValid && <AgentCheck agent={agent.trim() as `0x${string}`} onUse={setAgent} />}
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setOpenTask(false)}
+                className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition ${
+                  !openTask
+                    ? "border-accent-line bg-accent-soft text-accent"
+                    : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
+                }`}
+              >
+                Designated agent
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpenTask(true)}
+                className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition ${
+                  openTask
+                    ? "border-accent-line bg-accent-soft text-accent"
+                    : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
+                }`}
+              >
+                Open to any agent
+              </button>
             </div>
+            {openTask ? (
+              <div className="space-y-3">
+                <div className="rounded-lg border border-accent-line bg-accent-soft px-3.5 py-2.5 text-[13px] leading-relaxed text-mute">
+                  <strong className="font-medium text-fg">First come, first served.</strong> Any
+                  agent can claim this task — the chain picks exactly one winner (two accepts race,
+                  one lands). You can still review or dispute before funds release.
+                </div>
+                <div>
+                  <label className="label">Minimum agent rating</label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RATING_OPTIONS.map((r) => (
+                      <button
+                        key={r}
+                        type="button"
+                        onClick={() => setMinRating(r)}
+                        className={`rounded-lg border px-2.5 py-1.5 font-mono text-xs transition tnum ${
+                          minRating === r
+                            ? "border-accent-line bg-accent-soft text-accent"
+                            : "border-line bg-subtle text-mute hover:border-lineH hover:text-fg"
+                        }`}
+                      >
+                        {r === 0 ? "Any" : `${r}+`}
+                      </button>
+                    ))}
+                  </div>
+                  {!floorSupported && (
+                    <p className="mt-1.5 text-[11px] text-warn">
+                      Rating floors need the next contract deployment (current testnet contract is
+                      pre-v3) — floors are accepted in the UI but blocked at submit until then.
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[11px] text-faint">
+                    {minRating === 0
+                      ? "No floor — any agent may claim, including ones with no history yet."
+                      : `Only agents whose floored on-chain average is ${minRating}+ may claim. Unrated agents are blocked — their first earned ratings unlock gated work.`}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <label className="label">TaskPay account address</label>
+                <input
+                  className={`input font-mono ${agent && !agentValid ? "!border-bad-line" : ""}`}
+                  placeholder="0x…"
+                  value={agent}
+                  onChange={(e) => setAgent(e.target.value)}
+                  spellCheck={false}
+                />
+                <p className="mt-1.5 text-[11px] text-faint">
+                  The agent acts with sponsored gas from its TaskPay account. Paste its wallet address
+                  below and use the suggested account, or paste an account address directly.
+                </p>
+                {agent && !agentValid && (
+                  <p className="mt-1.5 text-xs text-bad">
+                    That does not look like a valid address (0x + 40 hex characters).
+                  </p>
+                )}
+                {agentValid && <AgentCheck agent={agent.trim() as `0x${string}`} onUse={setAgent} />}
+              </div>
+            )}
           </section>
 
           {/* Spec */}
@@ -485,13 +581,21 @@ export default function CreateTaskPage() {
           </section>
 
           {/* Summary */}
-          {(specText.trim() || agentValid) && (
+          {(specText.trim() || agentReady) && (
             <div className="rounded-lg border border-line bg-well px-4 py-3 text-[13px]">
               <div className="micro mb-2">Summary</div>
               <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 sm:grid-cols-3">
                 <div>
                   <dt className="text-[11px] text-faint">Agent</dt>
-                  <dd className="font-mono text-mute">{agentValid ? shortAddress(agent.trim()) : "—"}</dd>
+                  <dd className="font-mono text-mute">
+                    {openTask
+                      ? minRating > 0
+                        ? `Open · ${minRating}+ rating required`
+                        : "Open — first to accept"
+                      : agentValid
+                        ? shortAddress(agent.trim())
+                        : "—"}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-[11px] text-faint">Escrow</dt>

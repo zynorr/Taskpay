@@ -38,6 +38,16 @@ export interface OracleEnv {
   // Max sponsored ops per address per minute (0 disables). Protects the open
   // sponsor endpoints from being drained as a free-gas faucet.
   BUNDLER_RATE_LIMIT?: number;
+  // Autonomous agent daemon (bot/agent.ts). When AGENT_BOT_PRIVATE_KEY is set
+  // the oracle also runs a self-operating TaskPay agent: it accepts tasks
+  // created to its smart account (see lib docs), produces a deliverable with
+  // Groq, and submits it — all through the same sponsored gasless path. The
+  // bot is a distinct on-chain identity from the oracle operator.
+  AGENT_BOT_PRIVATE_KEY?: string;
+  AGENT_BOT_NAME?: string;
+  AGENT_BOT_POLL_SECONDS?: number;
+  AGENT_BOT_ACCEPT_ALL?: boolean;
+  AGENT_BOT_MODEL?: string;
 }
 
 function isValidUrl(value: string): boolean {
@@ -83,6 +93,9 @@ function validate(): OracleEnv {
   if (raw.ORACLE_PRIVATE_KEY && !isValidPrivateKey(raw.ORACLE_PRIVATE_KEY)) {
     errors.push("ORACLE_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string.");
   }
+  if (raw.AGENT_BOT_PRIVATE_KEY && !isValidPrivateKey(raw.AGENT_BOT_PRIVATE_KEY)) {
+    errors.push("AGENT_BOT_PRIVATE_KEY must be a 0x-prefixed 32-byte hex string.");
+  }
   if (raw.RPC_URL && !isValidUrl(raw.RPC_URL)) {
     errors.push("RPC_URL must be a valid URL.");
   }
@@ -115,6 +128,11 @@ function validate(): OracleEnv {
     }
   }
 
+  let agentBotPollSeconds: number | undefined;
+  if (raw.AGENT_BOT_POLL_SECONDS !== undefined && raw.AGENT_BOT_POLL_SECONDS !== "") {
+    agentBotPollSeconds = parsePositiveInt(raw.AGENT_BOT_POLL_SECONDS, "AGENT_BOT_POLL_SECONDS", errors);
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid oracle environment configuration:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
   }
@@ -135,6 +153,11 @@ function validate(): OracleEnv {
     AA_FACTORY: raw.AA_FACTORY || undefined,
     PAYMASTER: raw.PAYMASTER || undefined,
     BUNDLER_RATE_LIMIT: bundlerRateLimit,
+    AGENT_BOT_PRIVATE_KEY: raw.AGENT_BOT_PRIVATE_KEY || undefined,
+    AGENT_BOT_NAME: raw.AGENT_BOT_NAME || "DevBot",
+    AGENT_BOT_POLL_SECONDS: agentBotPollSeconds,
+    AGENT_BOT_ACCEPT_ALL: raw.AGENT_BOT_ACCEPT_ALL === "true",
+    AGENT_BOT_MODEL: raw.AGENT_BOT_MODEL || raw.GROQ_MODEL || undefined,
   };
 }
 

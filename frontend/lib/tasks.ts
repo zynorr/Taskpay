@@ -10,6 +10,7 @@ const abi = TASKPAY_ABI;
 
 type WriteName =
   | "createTask"
+  | "createOpenTask"
   | "acceptTask"
   | "submitWork"
   | "release"
@@ -84,6 +85,13 @@ export async function fetchTask(taskId: bigint): Promise<TaskView> {
     acceptDeadline: raw.acceptDeadline,
     workDeadline: raw.workDeadline,
     reviewDeadline: raw.reviewDeadline,
+    // Reputation floor matters only while an open task is unclaimed (that's
+    // what the marketplace badge shows) — skip the extra RPC for everything
+    // else so the marketplace poll doesn't double its call volume.
+    minRating:
+      raw.agent === "0x0000000000000000000000000000000000000000" && Number(raw.status) === 0
+        ? await fetchMinRating(taskId).catch(() => 0)
+        : 0,
   };
 }
 
@@ -333,6 +341,38 @@ export async function fetchCancellationApprovals(
 // specHash for the frontend's create-task flow: keccak256 of the spec text.
 export function specHashOf(specText: string): `0x${string}` {
   return keccak256(toHex(specText));
+}
+
+/** Per-task reputation floor for open tasks (0 = no requirement). */
+export async function fetchMinRating(taskId: bigint): Promise<number> {
+  const client = getPublicClient(config);
+  try {
+    const raw = (await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "minRatingOf",
+      args: [taskId],
+    })) as bigint;
+    return Number(raw);
+  } catch {
+    return 0; // pre-v3 contract: no floor concept
+  }
+}
+
+/** Whether the deployed contract supports createOpenTask (v3+). */
+export async function contractSupportsRatingFloor(): Promise<boolean> {
+  const client = getPublicClient(config);
+  try {
+    await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "minRatingOf",
+      args: [0n],
+    });
+    return true;
+  } catch {
+    return false; // pre-v3: open tasks work via createTask(0x0), floors don't
+  }
 }
 
 export interface TxResult {

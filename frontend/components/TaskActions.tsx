@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { writeGasless, myIdentity, fetchCancellationApprovals, type CancellationState } from "@/lib/tasks";
+import {
+  writeGasless,
+  myIdentity,
+  fetchCancellationApprovals,
+  fetchMinRating,
+  fetchAgentRating,
+  type CancellationState,
+} from "@/lib/tasks";
 import { bundlerUrl } from "@/lib/aa";
 import { Status } from "@/lib/contract";
 import { shortAddress, explorerTx, looksLikeUrl } from "@/lib/format";
@@ -81,6 +88,10 @@ export default function TaskActions({
   const [challengeReason, setChallengeReason] = useState("");
   const [rating, setRating] = useState(5);
   const [cancelApprovals, setCancelApprovals] = useState<CancellationState | null>(null);
+  // Open-task reputation floor + the connected wallet's rating summary, so the
+  // claim button can warn before an on-chain revert.
+  const [minRating, setMinRating] = useState(0);
+  const [myRating, setMyRating] = useState<{ totalScore: bigint; count: bigint } | null>(null);
 
   const [confirmed, setConfirmed] = useState<{ label: string; hash: string } | null>(null);
 
@@ -119,6 +130,34 @@ export default function TaskActions({
     };
   }, [canMutualCancel, task]);
 
+  // Reputation floor for open tasks + the visitor's own rating: lets the UI
+  // warn "you don't meet the floor" before an on-chain revert does.
+  const isOpenTask = task.agent === "0x0000000000000000000000000000000000000000";
+  useEffect(() => {
+    let alive = true;
+    if (task.status !== Status.Created || !isOpenTask) {
+      setMinRating(0);
+      return;
+    }
+    fetchMinRating(task.taskId).then((m) => alive && setMinRating(m));
+    return () => {
+      alive = false;
+    };
+  }, [task.taskId, task.status, isOpenTask]);
+  useEffect(() => {
+    let alive = true;
+    if (!smart) {
+      setMyRating(null);
+      return;
+    }
+    fetchAgentRating(smart)
+      .then((r) => alive && setMyRating(r))
+      .catch(() => alive && setMyRating(null));
+    return () => {
+      alive = false;
+    };
+  }, [smart, task.taskId]);
+
   if (!isConnected || !address) {
     return (
       <p className="rounded-lg border border-dashed border-line px-4 py-5 text-center text-[13px] text-faint">
@@ -134,6 +173,12 @@ export default function TaskActions({
 
   const isRequester = requester === meSmart;
   const isAgent = agent === meSmart;
+  // Open-task floor check: floored average must clear minRating (matches the
+  // contract's guard; count=0 always fails a floor >= 1).
+  const floorBlocksMe =
+    isOpenTask &&
+    minRating > 0 &&
+    (!myRating || myRating.count === 0n || myRating.totalScore / myRating.count < minRating);
   const legacyBlocked =
     meSmart !== null && !isRequester && !isAgent && (requester === me || agent === me);
 
@@ -186,14 +231,25 @@ export default function TaskActions({
       )}
       {confirmed && <ConfirmedTx label={confirmed.label} hash={confirmed.hash} />}
 
-      {/* Created: agent accepts */}
-      {task.status === Status.Created && isAgent && bundlerOnline && (
-        <ActionButton
-          tone="success"
-          label="Accept task"
-          busy={busy === "accept"}
-          onClick={() => act("accept", "acceptTask", [task.taskId])}
-        />
+      {/* Created: agent accepts — on open tasks, anyone but the requester can claim */}
+      {task.status === Status.Created && bundlerOnline && (isOpenTask ? !isRequester : isAgent) && (
+        <>
+          <ActionButton
+            tone="success"
+            label={isOpenTask ? "Claim task (first come, first served)" : "Accept task"}
+            busy={busy === "accept"}
+            disabled={floorBlocksMe}
+            onClick={() => act("accept", "acceptTask", [task.taskId])}
+          />
+          {floorBlocksMe && (
+            <p className="rounded-lg border border-warn-line bg-warn-soft px-3.5 py-2.5 text-[13px] text-mute">
+              This open task requires a <strong className="font-medium text-warn tnum">{minRating}+</strong> on-chain
+              rating. {myRating && myRating.count > 0n
+                ? `Your average is ${(Number(myRating.totalScore) / Number(myRating.count)).toFixed(1)}.`
+                : "You have no ratings yet — complete a first task to earn reputation."}
+            </p>
+          )}
+        </>
       )}
 
       {/* Created: requester can back out */}

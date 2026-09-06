@@ -5,7 +5,7 @@ import { rawContract, provider } from "./client.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
 
-type FilterName = "DisputeRaised" | "ChallengeRaised";
+type FilterName = "DisputeRaised" | "ChallengeRaised" | "TaskCreated";
 
 // Boot cursor strategy (highest priority first):
 //   1. ORACLE_START_BLOCK env override — explicit manual pin (redeploys etc).
@@ -48,6 +48,15 @@ export interface ChallengeRaisedEvent {
   taskId: bigint;
   challenger: string;
   reasoningHash: string;
+  blockNumber: number;
+  transactionHash: string;
+  logIndex: number;
+}
+
+export interface TaskCreatedEvent {
+  taskId: bigint;
+  requester: string;
+  agent: string; // 0x0 for open (first-come-first-served) tasks
   blockNumber: number;
   transactionHash: string;
   logIndex: number;
@@ -166,6 +175,24 @@ export class ContractEventPoller {
           taskId: log.args.taskId as bigint,
           challenger: log.args.challenger as string,
           reasoningHash: log.args.reasoningHash as string,
+          blockNumber: log.blockNumber,
+          transactionHash: log.transactionHash,
+          logIndex: log.index,
+        }),
+        handler,
+      ) as EventSource<unknown>,
+    );
+    return this;
+  }
+
+  onTaskCreated(handler: Handler<TaskCreatedEvent>): this {
+    this.sources.push(
+      makeSource(
+        "TaskCreated",
+        (log) => ({
+          taskId: log.args.taskId as bigint,
+          requester: log.args.requester as string,
+          agent: log.args.agent as string,
           blockNumber: log.blockNumber,
           transactionHash: log.transactionHash,
           logIndex: log.index,

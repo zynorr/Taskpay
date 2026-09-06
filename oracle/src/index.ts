@@ -7,6 +7,8 @@ import { handleChallengeRaised } from "./pipeline/handleChallenge.js";
 import { runAutoActionsScan } from "./pipeline/autoActions.js";
 import { handleBundlerRequest } from "./bundler/routes.js";
 import { PaymasterDepositMonitor } from "./monitor/paymaster.js";
+import { AgentBot } from "./bot/agent.js";
+import { withTimeout } from "./lib/concurrency.js";
 
 logger.info("oracle_starting", {
   contractAddress: env.CONTRACT_ADDRESS,
@@ -57,22 +59,40 @@ healthServer.listen(port, "127.0.0.1", () => {
   });
 });
 
+// Autonomous agent daemon: with AGENT_BOT_PRIVATE_KEY set, the oracle also
+// runs a self-operating worker that accepts tasks created for its smart
+// account (or claims open first-come-first-served tasks), generates a
+// deliverable (Groq), and submits it — all gasless. Created before the poller
+// so its instant-reaction hook can be registered on the TaskCreated source.
+const agentBot = env.AGENT_BOT_PRIVATE_KEY ? new AgentBot() : null;
+if (agentBot) void agentBot.start();
+
 const poller = new ContractEventPoller();
 poller.onDisputeRaised((event) => handleDisputeRaised(event));
 poller.onChallengeRaised((event) => handleChallengeRaised(event));
+if (agentBot) {
+  // Open tasks (agent = 0x0) are evaluated and claimed the moment TaskCreated
+  // lands in a polled block — first come, first served favors the fastest
+  // listener. The poll fallback in the bot's tick catches anything missed.
+  poller.onTaskCreated((event) => agentBot.notifyTaskCreated(event.taskId, event.agent));
+}
 poller.start();
 
 // Separate timer from the event poller: this scan enumerates every task by ID
 // (not by event log) to catch deadline transitions that have no event to poll
 // for (finalizeAfterReview / finalizeAfterChallenge /
 // resolveAfterSeniorArbiterTimeout). `scanning` guards against overlap.
+// The scan is timeout-guarded like the bot tick: a hung RPC must skip a scan
+// cycle, never leave `scanning = true` forever and silently stop all future
+// deadline transitions (that wedge was observed live on the testnet RPC).
+const SCAN_TIMEOUT_MS = 60_000;
 let scanning = false;
 let currentScan: Promise<void> = Promise.resolve();
 async function runScanTick(): Promise<void> {
   if (scanning) return;
   scanning = true;
   try {
-    await runAutoActionsScan();
+    await withTimeout(runAutoActionsScan(), SCAN_TIMEOUT_MS, "auto_actions_scan");
   } catch (err) {
     logger.error("auto_actions_scan_failed", { error: err instanceof Error ? err.message : String(err) });
   } finally {
@@ -90,6 +110,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info("oracle_shutting_down", { signal });
   poller.stop();
   depositMonitor.stop();
+  agentBot?.stop();
   clearInterval(scanTimer);
   healthServer.close();
   // Give in-flight work a chance to finish (Render sends SIGTERM on every

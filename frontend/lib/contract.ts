@@ -161,6 +161,26 @@ export const TASKPAY_ABI = [
   },
   {
     type: "function",
+    name: "createOpenTask",
+    stateMutability: "payable",
+    inputs: [
+      { name: "specHash", type: "bytes32" },
+      { name: "acceptWindow", type: "uint256" },
+      { name: "workDuration", type: "uint256" },
+      { name: "reviewPeriod", type: "uint256" },
+      { name: "minRating", type: "uint256" },
+    ],
+    outputs: [{ name: "taskId", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "minRatingOf",
+    stateMutability: "view",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
     name: "acceptTask",
     stateMutability: "nonpayable",
     inputs: [{ name: "taskId", type: "uint256" }],

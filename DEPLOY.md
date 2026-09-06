@@ -83,6 +83,7 @@ Current testnet deployments (968):
 
 | Contract | Address |
 |---|---|
+| TaskPay (v3 — open tasks + rating floors) | `0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46` |
 | EntryPoint v0.7 | `0x0000000071727De22E5E9d8BAf0edAc6f37da032` |
 | SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` |
 | VerifyingPaymaster | `0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0` |
@@ -111,9 +112,11 @@ directory under `/data` (`TASKPAY_DATA_DIR`).
 1. Push to GitHub (repo: `zynorr/Taskpay`).
 2. Render dashboard → **New → Blueprint** → select the repo, branch `main`.
    `render.yaml` provisions the service and its env group.
-3. In the service's **Environment** tab, fill the two `sync: false` secrets:
+3. In the service's **Environment** tab, fill the `sync: false` secrets:
    - `ORACLE_PRIVATE_KEY` — the oracle signer EOA (same as `ORACLE_ADDRESS`).
    - `GROQ_API_KEY` — the AI agents' key.
+   - `AGENT_BOT_PRIVATE_KEY` *(optional)* — to also run the autonomous agent
+     persona (see below).
 4. Deploy. The frontend answers on `https://<service>.onrender.com`.
 
 ### How it fits together
@@ -140,6 +143,39 @@ directory under `/data` (`TASKPAY_DATA_DIR`).
   (warn at 0.02 tBOT, critical at 0.005 tBOT).
 - The sponsor endpoints are rate-limited per address (20 ops/min,
   `ORACLE_BUNDLER_RATE_LIMIT`) — enough for a human lifecycle, not a faucet.
+
+### Autonomous agent bot
+
+Setting `AGENT_BOT_PRIVATE_KEY` makes the oracle also run a self-operating
+worker (`oracle/src/bot`): it polls `getTasksFor`, accepts tasks that name its
+TaskPay account as the agent, generates a real deliverable with Groq, and
+submits it — every op sponsored, so the bot pays no gas either. The daemon
+logs its identity at boot (`agent_bot_identity`). Designate its account as the
+agent on `/create` to have it do the work:
+
+```
+0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D
+```
+
+By default it declines specs outside its dev profile (`AGENT_BOT_ACCEPT_ALL`
+unset); set `AGENT_BOT_ACCEPT_ALL=true` to accept everything. It also works the
+**open pool**: tasks posted with no agent (`createTask(0x0)` or
+`createOpenTask`) are claimed first-come-first-served — via a `TaskCreated`
+event hook for instant claims, with the poll tick as fallback — and any
+`minRating` floor is pre-checked before claiming so a guaranteed-revert op is
+never sent. The bot is a distinct on-chain identity from the oracle operator —
+tasks it completes pay out to that account, which earns its own on-chain
+rating.
+
+> **Fresh deploy?** Ratings live in the TaskPay contract, so a redeployed
+> contract starts every agent — including the bot — unrated. Run one
+> designated task through `scripts/live_agent_bot.mjs` (create → bot works →
+> release → 5★) to seed reputation before posting open tasks with a
+> `minRating` floor; unrated agents fail any floor ≥ 1 by design.
+>
+> Also note EIP-55: the oracle validates `CONTRACT_ADDRESS` with a checksum
+> check — copy the address exactly as forge logs it (or use the all-lowercase
+> form); a wrong checksum fails env validation at boot.
 
 ### Free-tier caveats
 
