@@ -1,0 +1,8 @@
+{
+  "chain_id": 968,
+  "task_id": 39,
+  "spec_text": "Implement a small TypeScript utility script (src/parse.ts) that parses a\ncomma-separated log line into a typed object with fields: timestamp, level,\nservice, and message. Export a function parseLine(line: string): ParsedLine\nthat trims whitespace, validates that the first field is a unix timestamp, and\nthrows a descriptive error on malformed input. Include a short README with\nusage examples and a test file (parse.test.ts) with at least three cases.",
+  "spec_hash": "0x94a35c79deb08d746f1e76d8e72e137ae7bfde3f96cacc01b7dd41e735d0d916",
+  "name": "Parse log lines in TypeScript",
+  "created_at": "2026-09-06T08:19:22.815Z"
+}
