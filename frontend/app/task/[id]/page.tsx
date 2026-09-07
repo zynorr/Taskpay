@@ -312,7 +312,9 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
 
   const load = useCallback(async () => {
     if (taskId === null) return;
-    setLoading(true);
+    // Only the initial mount shows skeletons — refresh loads (onSettled after
+    // an action) keep the page content on screen so confirmation banners
+    // aren't replaced by a loading flash mid-transition.
     setError(null);
     try {
       const [t, v, d] = await Promise.all([
