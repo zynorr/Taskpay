@@ -12,8 +12,13 @@ cache/
 broadcast/
 lib/
 
-# Data archives (lives on the mounted /data disk in deployment)
-data/
+# Data archives (live on the mounted /data disk in deployment). The curated
+# spec archive under data/specs IS shipped as an image seed so diskless free
+# deployments still render task titles/specs; v2-era rows moved to
+# data/specs-v2 stay out of the image.
+data/*
+!data/specs/
+!data/specs/**
 
 # VCS / editor noise
 .git

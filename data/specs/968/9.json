@@ -1,8 +1,8 @@
 {
   "chain_id": 968,
-  "task_id": 11,
+  "task_id": 9,
   "spec_text": "Produce a one-paragraph markdown summary of TaskPay's escrow flow, with a three-step checklist. Mobile-viewport UI test.",
   "spec_hash": "0x3b1963ed7379db830e53d7b17036f704e773c54f725687e1283bc914ac280cd8",
   "name": "UI mobile E2E — write a README section",
-  "created_at": "2026-09-07T09:18:08.721Z"
+  "created_at": "2026-09-07T09:11:41.146Z"
 }

@@ -34,6 +34,12 @@ COPY --from=build /app/frontend ./frontend
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Ship the curated spec archive as a seed: the free Render tier has no
+# persistent /data disk, so without this every redeploy boots with an empty
+# archive and task titles/specs disappear. The entrypoint seeds
+# TASKPAY_DATA_DIR from this copy when the runtime archive is missing.
+COPY data/specs /app/spec-seed/specs
+
 # The oracle listens internally on 8787; 3000 is the single public port.
 EXPOSE 3000
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

@@ -9,6 +9,15 @@ set -e
 
 export TASKPAY_DATA_DIR="${TASKPAY_DATA_DIR:-/data}"
 
+# A fresh container (the free plan has no persistent /data) boots with an empty
+# spec archive — task titles/specs render only from archived rows, and the
+# on-chain task ids were seeded from the image copy below. Never overwrite an
+# existing archive (a paid-plan disk mount keeps its own rows).
+if [ -d /app/spec-seed/specs ] && [ ! -d "$TASKPAY_DATA_DIR/specs" ]; then
+  mkdir -p "$TASKPAY_DATA_DIR"
+  cp -r /app/spec-seed/specs "$TASKPAY_DATA_DIR/"
+fi
+
 PORT=8787 node /app/oracle/dist/index.js &
 ORACLE_PID=$!
 
