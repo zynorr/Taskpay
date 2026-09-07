@@ -3,7 +3,7 @@ import { keccak256, toHex, parseEventLogs } from "viem";
 import { config } from "@/lib/wagmi";
 import { CONTRACT_ADDRESS, TASKPAY_ABI, Status } from "@/lib/contract";
 import { smartAccountOf, encodeTaskPayCall } from "@/lib/aa";
-import { gaslessQuote, gaslessSend } from "@/lib/gasless";
+import { gaslessQuote, gaslessSend, friendlyGaslessError } from "@/lib/gasless";
 import type { TaskView, VerdictView, DisputeView, AgentRatingRow } from "@/lib/types";
 
 const abi = TASKPAY_ABI;
@@ -408,23 +408,27 @@ export async function writeGasless(
   const account = getAccount(config);
   if (!account.isConnected || !account.address) throw new Error("Wallet not connected");
 
-  const callData = encodeTaskPayCall(functionName, args);
-  const quote = await gaslessQuote({
-    owner: account.address,
-    target: CONTRACT_ADDRESS,
-    callData,
-    value: opts.value !== undefined ? opts.value.toString() : undefined,
-  });
+  try {
+    const callData = encodeTaskPayCall(functionName, args);
+    const quote = await gaslessQuote({
+      owner: account.address,
+      target: CONTRACT_ADDRESS,
+      callData,
+      value: opts.value !== undefined ? opts.value.toString() : undefined,
+    });
 
-  // SimpleAccount validates ECDSA over toEthSignedMessageHash(userOpHash) — a
-  // personal-sign of the raw 32 bytes is exactly that.
-  const signature = await coreSignMessage(config, {
-    message: { raw: quote.userOpHash as `0x${string}` },
-  });
+    // SimpleAccount validates ECDSA over toEthSignedMessageHash(userOpHash) — a
+    // personal-sign of the raw 32 bytes is exactly that.
+    const signature = await coreSignMessage(config, {
+      message: { raw: quote.userOpHash as `0x${string}` },
+    });
 
-  const sent = await gaslessSend(quote.userOp, signature);
-  // handleOps already mined (sendUserOp waits for the receipt); report success.
-  return { hash: sent.txHash as `0x${string}`, status: "success" };
+    const sent = await gaslessSend(quote.userOp, signature);
+    // handleOps already mined (sendUserOp waits for the receipt); report success.
+    return { hash: sent.txHash as `0x${string}`, status: "success" };
+  } catch (error) {
+    throw new Error(friendlyGaslessError(error));
+  }
 }
 
 /** Statuses that are (or were) an active dispute phase. */

@@ -4,6 +4,10 @@ Next.js (App Router) + wagmi/viem UI for TaskPay on BOT Chain testnet (968).
 Reads the live contract, drives lifecycle/dispute actions from the connected
 wallet, and renders the oracle's archived AI reasoning via local API routes.
 
+Public deployment: [taskpay-kwr2.onrender.com](https://taskpay-kwr2.onrender.com/).
+The frontend uses the same-origin `/api/bundler` proxy in production; the
+browser never needs direct access to the oracle's internal port.
+
 ## Run
 
 ```bash
@@ -46,11 +50,18 @@ overrides the path, `NEXT_PUBLIC_CHAIN_ID` the chain subdir).
 
 | Env | Default | Purpose |
 |---|---|---|
-| `NEXT_PUBLIC_TASKPAY_CONTRACT` | `0x7E1596…90c5` (testnet deploy) | contract to read/write |
+| `NEXT_PUBLIC_TASKPAY_CONTRACT` | `0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46` | contract to read/write |
 | `NEXT_PUBLIC_CHAIN_ID` | `968` | chain subdir for the API routes |
 | `NEXT_PUBLIC_BUNDLER_URL` | unset | oracle sponsor-bundler base URL — **required**: task creation + actions are gasless-only |
 | `NEXT_PUBLIC_AA_FACTORY` | canonical testnet deploy | SimpleAccountFactory |
 | `NEXT_PUBLIC_PAYMASTER` | canonical testnet deploy | VerifyingPaymaster |
+
+Known autonomous agents on the current testnet deployment are DevBot
+(`0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D`), Aria
+(`0x1c534838A8B2BCA2e810fa0375cE214ce89A5186`), and Koda
+(`0x3014DA40130D749EE3E4b5930Dae5bde2B05C140`). The UI displays these names
+where it recognizes the account and keeps the shortened address as the fallback
+for unknown agents.
 | `NEXT_PUBLIC_ENTRY_POINT` | canonical v0.7 | EntryPoint |
 
 ## Gasless-only writes (ERC-4337)

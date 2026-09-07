@@ -88,6 +88,57 @@ Current testnet deployments (968):
 | SimpleAccountFactory | `0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b` |
 | VerifyingPaymaster | `0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0` |
 
+Public testnet UI: [https://taskpay-kwr2.onrender.com/](https://taskpay-kwr2.onrender.com/).
+The Render service runs the oracle on loopback port 8787 and the frontend on
+public port 3000. The frontend proxies `/api/bundler/v1/quote` and
+`/api/bundler/v1/send` to the internal oracle.
+
+The current autonomous accounts are:
+
+| Agent | SimpleAccount |
+|---|---|
+| DevBot | `0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D` |
+| Aria | `0x1c534838A8B2BCA2e810fa0375cE214ce89A5186` |
+| Koda | `0x3014DA40130D749EE3E4b5930Dae5bde2B05C140` |
+
+### Render Environment
+
+The public service requires these non-secret values:
+
+```env
+RPC_URL=https://rpc.bohr.life
+CHAIN_ID=968
+CONTRACT_ADDRESS=0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46
+ENTRY_POINT=0x0000000071727De22E5E9d8BAf0edAc6f37da032
+AA_FACTORY=0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b
+PAYMASTER=0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0
+PORT=8787
+ORACLE_INTERNAL_URL=http://127.0.0.1:8787
+POLL_INTERVAL_SECONDS=2
+AGENT_BOT_POLL_SECONDS=2
+AGENT_BOT_ACCEPT_ALL=true
+ORACLE_BUNDLER_RATE_LIMIT=20
+NEXT_PUBLIC_BUNDLER_URL=/api/bundler
+NEXT_PUBLIC_CHAIN_ID=968
+NEXT_PUBLIC_TASKPAY_CONTRACT=0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46
+NEXT_PUBLIC_ENTRY_POINT=0x0000000071727De22E5E9d8BAf0edAc6f37da032
+NEXT_PUBLIC_AA_FACTORY=0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b
+NEXT_PUBLIC_PAYMASTER=0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0
+TASKPAY_DATA_DIR=/data
+```
+
+Keep `ORACLE_PRIVATE_KEY`, `GROQ_API_KEY`, and `AGENT_BOTS` as Render secret
+variables. `AGENT_BOTS` is a JSON array of private-key entries, for example
+`[{"key":"0x...","name":"DevBot","acceptAll":true,"pollSeconds":2}]`.
+Never commit those values. After saving the variables, use **Manual Deploy →
+Deploy latest commit** and confirm the logs contain one `agent_bot_identity`
+entry per configured bot.
+
+The sponsor reserve must be funded separately from task escrow. Deposit native
+tBOT through the paymaster's `deposit()` function and verify the balance with
+the EntryPoint's `balanceOf(paymaster)`. An `AA31 paymaster deposit too low`
+error means this reserve, not the user's task balance, needs funding.
+
 Point `ENTRY_POINT` / `AA_FACTORY` / `PAYMASTER` in taskpay/.env at these and
 run the oracle on `PORT=8787` — it serves the bundler endpoints the frontend
 calls. See the repo README's Phase 4 section and `scripts/live_gasless.mjs`.
@@ -119,7 +170,7 @@ directory under `/data` (`TASKPAY_DATA_DIR`).
      (each entry: `key`, plus optional `name`/`pollSeconds`/`model`/`acceptAll`/
      `profile`); omit it (or set `AGENT_BOT_PRIVATE_KEY` alone) for a single
      agent persona (see below).
-4. Deploy. The frontend answers on `https://<service>.onrender.com`.
+4. Deploy. The frontend answers on https://taskpay-kwr2.onrender.com/.
 
 ### How it fits together
 

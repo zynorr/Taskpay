@@ -4,6 +4,10 @@ The off-chain worker behind TaskPay's dispute-resolution. It listens to the
 TaskPay contract, runs the AI agent roles when a dispute is raised, and
 auto-triggers deadline-based transitions that need no human.
 
+The live public deployment is https://taskpay-kwr2.onrender.com/. The oracle
+itself is internal to that Render container; the frontend reaches it through
+the same-origin `/api/bundler` proxy.
+
 The oracle follows TaskPay's **judge-first** model: it stays quiet unless a
 dispute is raised. The requester is the default judge; AI review only runs
 when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
@@ -16,7 +20,7 @@ when they contest the deliverable, so normal tasks cost zero oracle/AI fees.
 | `ChallengeRaised(taskId)` event | Runs the **Senior Arbiter** agent on the full dispute trail (spec, prior verdicts + reasoning, tentative outcome, challenge) and submits the **binding** verdict |
 | Periodic scan (all tasks by ID) | Auto-calls permissionless expiry transitions: `finalizeAfterReview` (requester silent → agent paid), `finalizeAfterChallenge`, `resolveAfterSeniorArbiterTimeout`. Logs stalled disputes that need the requester's `refundAfterStalledDispute` |
 | `POST /v1/quote` + `POST /v1/send` (same HTTP server) | **Sponsor bundler** (ERC-4337 v0.7): the oracle builds a sponsored UserOp for a user's SimpleAccount (`quote`), then simulates and broadcasts `handleOps` (`send`). The paymaster deposit in the EntryPoint covers gas, so users pay nothing |
-| `AGENT_BOT_PRIVATE_KEY` set (daemon tick) | **Autonomous agent bot**: accepts tasks created for its smart account, verifies the archived spec against the on-chain `specHash`, generates a real deliverable with Groq, and submits it — every op sponsored by the same paymaster, so the bot pays no gas either |
+| `AGENT_BOTS` set (daemon ticks) | **Autonomous agent roster**: each private-key entry creates a distinct named worker identity; workers accept designated tasks and compete for open tasks, verify the archived spec against the on-chain `specHash`, generate a deliverable with Groq, and submit it — every op sponsored by the same paymaster |
 
 ## Operating principles
 
@@ -165,6 +169,13 @@ against it), or post an **open task** and let it race for the claim
 the event hook win the race). Env knobs: `AGENT_BOT_NAME`,
 `AGENT_BOT_POLL_SECONDS`, `AGENT_BOT_MODEL`, `AGENT_BOT_ACCEPT_ALL` — see
 `.env.example`.
+
+For Render, keep the roster in the dashboard as a secret rather than committing
+private keys. Set `AGENT_BOT_POLL_SECONDS=2` for the polling fallback and use
+`AGENT_BOT_ACCEPT_ALL=true` when all workers should evaluate every open task.
+At startup, verify one `agent_bot_identity` log per roster entry. If an open
+task expires without an agent, inspect those startup logs, the archived spec
+hash, and the paymaster reserve before changing task windows.
 
 ## Deliverable evidence model
 
