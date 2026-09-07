@@ -13,10 +13,10 @@ export default function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-lineSoft bg-canvas backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex min-h-16 w-full max-w-6xl flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-2.5 sm:px-6">
         <Logo />
 
-        <nav className="flex items-center gap-5 text-sm">
+        <nav className="ml-auto flex items-center gap-5 text-sm sm:ml-0">
           <div className="hidden items-center gap-5 sm:flex">
             {links.map((l) => {
               const active = l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);

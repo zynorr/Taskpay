@@ -128,12 +128,22 @@ function LifecycleTimeline({ status }: { status: number }) {
 
   return (
     <div className="panel px-5 py-4">
-      <ol className="flex items-center">
+      <ol className="flex flex-col sm:flex-row sm:items-center">
         {steps.map((s, i) => {
           const done = i < current;
           const active = i === current;
           return (
-            <li key={s} className="flex flex-1 items-center last:flex-none">
+            <li
+              key={s}
+              className="relative flex items-center gap-2.5 pb-3.5 last:pb-0 sm:flex-1 sm:pb-0 sm:last:flex-none"
+            >
+              {i < steps.length - 1 && (
+                <span
+                  className={`absolute left-[11px] top-6 h-[calc(100%-24px)] w-px sm:hidden ${
+                    i < current ? "bg-ok-line" : "bg-lineSoft"
+                  }`}
+                />
+              )}
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                   done
@@ -150,7 +160,7 @@ function LifecycleTimeline({ status }: { status: number }) {
                 )}
               </span>
               <span
-                className={`ml-2 text-xs font-medium ${
+                className={`text-xs font-medium ${
                   active ? "text-fg" : done ? "text-mute" : "text-faint"
                 }`}
               >
@@ -158,7 +168,7 @@ function LifecycleTimeline({ status }: { status: number }) {
               </span>
               {i < steps.length - 1 && (
                 <span
-                  className={`mx-2 h-px flex-1 sm:mx-3 ${
+                  className={`mx-2 hidden h-px flex-1 sm:mx-3 sm:block ${
                     i < current ? "bg-ok-line" : "bg-lineSoft"
                   }`}
                 />
@@ -266,7 +276,7 @@ function Rating({ avg, count }: { avg: number | null; count: bigint }) {
     return <span className="text-xs text-faint">Not rated yet</span>;
   }
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className="inline-flex flex-wrap items-center gap-1.5">
       <span className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((n) => (
           <Star
@@ -368,7 +378,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   if (error) {
     return (
       <div className="flex flex-col items-center gap-3 rounded-xl border border-line bg-subtle px-6 py-14 text-center">
-        <p className="text-sm text-fg">{error}</p>
+        <p className="max-w-full break-words text-sm text-fg">{error}</p>
         <Link href="/" className="btn-secondary btn-sm">
           Back to marketplace
         </Link>

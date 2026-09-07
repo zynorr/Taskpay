@@ -246,7 +246,7 @@ export default function HomePage() {
               >
                 <Refresh size={13} className={refreshing ? "animate-spin" : ""} />
               </button>
-              <div className="inline-flex items-center gap-0.5 rounded-lg border border-line bg-subtle p-0.5">
+              <div className="inline-flex flex-wrap items-center gap-0.5 rounded-lg border border-line bg-subtle p-0.5">
                 {FILTERS.map((f) => (
                   <button
                     key={f.key}
@@ -304,7 +304,7 @@ export default function HomePage() {
 
         {error && (
           <div className="banner-bad mb-4">
-            <span>Could not load tasks: {error}</span>
+            <span className="min-w-0 break-words">Could not load tasks: {error}</span>
           </div>
         )}
 

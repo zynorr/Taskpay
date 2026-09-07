@@ -226,7 +226,7 @@ export default function TaskActions({
       {error && (
         <div className="banner-bad">
           <AlertTriangle size={15} className="mt-0.5 shrink-0" />
-          <span>{error}</span>
+          <span className="min-w-0 break-words">{error}</span>
         </div>
       )}
       {confirmed && <ConfirmedTx label={confirmed.label} hash={confirmed.hash} />}

@@ -313,7 +313,7 @@ export default function CreateTaskPage() {
             <div className="min-w-0">
               <div className="text-sm font-medium text-fg">Your TaskPay account</div>
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-xs text-mute">{smart}</span>
+                <span className="break-all font-mono text-xs text-mute">{smart}</span>
                 <button
                   onClick={onCopy}
                   title="Copy address"
@@ -836,11 +836,11 @@ function AgentCheck({ agent, onUse }: { agent: `0x${string}`; onUse: (sa: string
     );
   } else {
     check = (
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent-line bg-accent-soft px-3.5 py-2.5 text-[13px] text-mute">
-        <span className="min-w-0 leading-relaxed">
-          This is a plain wallet — it acts on-chain as its account{" "}
-          <span className="font-mono text-accent">{info.smart}</span>, deployed on first use.
-        </span>
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-accent-line bg-accent-soft px-3.5 py-2.5 text-[13px] text-mute">          <span className="min-w-0 leading-relaxed">
+            This is a plain wallet — it acts on-chain as its account{" "}
+            <span className="break-all font-mono text-accent">{info.smart}</span>, deployed on
+            first use.
+          </span>
         <button
           type="button"
           onClick={() => onUse(info.smart)}

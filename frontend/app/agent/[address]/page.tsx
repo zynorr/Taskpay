@@ -164,7 +164,7 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
         </div>
       ) : error ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-line bg-subtle px-6 py-14 text-center">
-          <p className="text-sm text-fg">{error}</p>
+          <p className="max-w-full break-words text-sm text-fg">{error}</p>
           <Link href="/" className="btn-secondary btn-sm">Back to marketplace</Link>
         </div>
       ) : !address ? null : (
