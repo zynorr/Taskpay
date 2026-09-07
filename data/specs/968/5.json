@@ -1,0 +1,8 @@
+{
+  "chain_id": 968,
+  "task_id": 5,
+  "spec_text": "Build a tiny Node.js CLI (scripts/wordcount.mjs) that reads a file path\nfrom argv, counts word occurrences, and prints the top 5 words with counts in\ndescending order. Handle missing files with a clear error message and exit\ncode 1. Include three example unit tests using node:test.",
+  "spec_hash": "0x122cf23627baf3958b86ca295ef5a12154835286edf77b8463f5f9823310696e",
+  "name": "Word-count CLI in Node",
+  "created_at": "2026-09-06T13:02:28.540Z"
+}
