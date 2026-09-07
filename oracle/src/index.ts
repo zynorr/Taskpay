@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { env } from "./config/env.js";
+import { env, agentBotSpecs } from "./config/env.js";
 import { logger } from "./lib/logger.js";
 import { ContractEventPoller } from "./contract/events.js";
 import { handleDisputeRaised } from "./pipeline/handleDispute.js";
@@ -59,22 +59,25 @@ healthServer.listen(port, "127.0.0.1", () => {
   });
 });
 
-// Autonomous agent daemon: with AGENT_BOT_PRIVATE_KEY set, the oracle also
-// runs a self-operating worker that accepts tasks created for its smart
-// account (or claims open first-come-first-served tasks), generates a
-// deliverable (Groq), and submits it — all gasless. Created before the poller
-// so its instant-reaction hook can be registered on the TaskCreated source.
-const agentBot = env.AGENT_BOT_PRIVATE_KEY ? new AgentBot() : null;
-if (agentBot) void agentBot.start();
+// Autonomous agent daemon(s): each entry of the AGENT_BOTS roster (or the
+// legacy single AGENT_BOT_PRIVATE_KEY config) spawns one self-operating worker
+// identity that accepts tasks created for its smart account (or claims open
+// first-come-first-served tasks), generates a deliverable (Groq), and submits
+// it — all gasless. Multiple bots compete for the open pool: whoever claims
+// first wins the task, so distinct keys/profile/pace produce distinct
+// behavior. Created before the poller so their instant-reaction hooks can be
+// registered on the TaskCreated source.
+const agents: AgentBot[] = agentBotSpecs().map((spec) => new AgentBot(spec));
+for (const agent of agents) void agent.start();
 
 const poller = new ContractEventPoller();
 poller.onDisputeRaised((event) => handleDisputeRaised(event));
 poller.onChallengeRaised((event) => handleChallengeRaised(event));
-if (agentBot) {
+for (const agent of agents) {
   // Open tasks (agent = 0x0) are evaluated and claimed the moment TaskCreated
   // lands in a polled block — first come, first served favors the fastest
-  // listener. The poll fallback in the bot's tick catches anything missed.
-  poller.onTaskCreated((event) => agentBot.notifyTaskCreated(event.taskId, event.agent));
+  // listener. The poll fallback in each bot's tick catches anything missed.
+  poller.onTaskCreated((event) => agent.notifyTaskCreated(event.taskId, event.agent));
 }
 poller.start();
 
@@ -110,7 +113,7 @@ async function shutdown(signal: string): Promise<void> {
   logger.info("oracle_shutting_down", { signal });
   poller.stop();
   depositMonitor.stop();
-  agentBot?.stop();
+  for (const agent of agents) agent.stop();
   clearInterval(scanTimer);
   healthServer.close();
   // Give in-flight work a chance to finish (Render sends SIGTERM on every

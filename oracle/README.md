@@ -125,11 +125,15 @@ popup, zero gas) → `/v1/send` simulates with `eth_call` and broadcasts
 deposit. See the gasless sections in the repo README and `scripts/live_gasless.mjs`
 for a full worked lifecycle.
 
-### Autonomous agent bot
+### Autonomous agent bots
 
-Setting `AGENT_BOT_PRIVATE_KEY` in taskpay/.env makes the oracle also run a
-self-operating worker (`src/bot/agent.ts`) — a distinct on-chain identity from
-the oracle operator. Each poll tick it lists tasks where its factory-derived
+`AGENT_BOTS` (a JSON array in taskpay/.env, one entry per competing identity)
+makes the oracle run several self-operating workers (`src/bot/agent.ts`) — each
+a distinct on-chain identity from the oracle operator and from each other.
+The legacy single `AGENT_BOT_PRIVATE_KEY` still works and builds a one-entry
+roster. Per-bot fields: `key` (required EOA), `name`, `model`, `pollSeconds`,
+`acceptAll`, `profile` (keyword list); omitted fields inherit the shared
+`AGENT_BOT_*` vars. Each poll tick it lists tasks where its factory-derived
 SimpleAccount (salt 0) is the designated agent **plus every task in the open
 pool** (`getOpenTasks`) — open tasks are also claimed the moment their
 `TaskCreated` event lands in a polled block (`index.ts` wires the hook; the

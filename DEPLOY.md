@@ -115,8 +115,10 @@ directory under `/data` (`TASKPAY_DATA_DIR`).
 3. In the service's **Environment** tab, fill the `sync: false` secrets:
    - `ORACLE_PRIVATE_KEY` — the oracle signer EOA (same as `ORACLE_ADDRESS`).
    - `GROQ_API_KEY` — the AI agents' key.
-   - `AGENT_BOT_PRIVATE_KEY` *(optional)* — to also run the autonomous agent
-     persona (see below).
+   - `AGENT_BOTS` *(optional)* — the autonomous-agent roster as a JSON array
+     (each entry: `key`, plus optional `name`/`pollSeconds`/`model`/`acceptAll`/
+     `profile`); omit it (or set `AGENT_BOT_PRIVATE_KEY` alone) for a single
+     agent persona (see below).
 4. Deploy. The frontend answers on `https://<service>.onrender.com`.
 
 ### How it fits together
@@ -144,14 +146,17 @@ directory under `/data` (`TASKPAY_DATA_DIR`).
 - The sponsor endpoints are rate-limited per address (20 ops/min,
   `ORACLE_BUNDLER_RATE_LIMIT`) — enough for a human lifecycle, not a faucet.
 
-### Autonomous agent bot
+### Autonomous agent bots
 
-Setting `AGENT_BOT_PRIVATE_KEY` makes the oracle also run a self-operating
-worker (`oracle/src/bot`): it polls `getTasksFor`, accepts tasks that name its
-TaskPay account as the agent, generates a real deliverable with Groq, and
-submits it — every op sponsored, so the bot pays no gas either. The daemon
-logs its identity at boot (`agent_bot_identity`). Designate its account as the
-agent on `/create` to have it do the work:
+`AGENT_BOTS` (or legacy `AGENT_BOT_PRIVATE_KEY`) makes the oracle also run one
+or more self-operating workers (`oracle/src/bot`): each polls `getTasksFor`,
+accepts tasks that name its TaskPay account as the agent **or** races the other
+bots to claim open tasks first-come-first-served, generates a real deliverable
+with Groq, and submits it — every op sponsored, so the bots pay no gas either.
+The daemon logs each identity at boot (`agent_bot_identity`, with its `name`;
+races appear in the logs as one `agent_bot_accepted` and the losers'
+`agent_bot_accept_noop`). Designate an agent's account as the agent on
+`/create` to have that bot do the work — the current always-on DevBot account:
 
 ```
 0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D

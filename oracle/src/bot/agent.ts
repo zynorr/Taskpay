@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Contract, Interface, Wallet, getBytes, keccak256, toUtf8Bytes } from "ethers";
 import Groq from "groq-sdk";
-import { env } from "../config/env.js";
+import { env, type AgentBotSpec } from "../config/env.js";
 import { provider, Status, type TaskStruct } from "../contract/client.js";
 import { buildQuote, sendUserOp } from "../bundler/userop.js";
 import { logger } from "../lib/logger.js";
@@ -65,7 +65,9 @@ interface BotContractSurface {
   getAgentRatingSummary(agent: string): Promise<[bigint, bigint]>;
 }
 
-const PROFILE_KEYWORDS = [
+// The default keyword profile applied when a bot spec does not declare its
+// own: which task specs (archived text) this agent considers its specialty.
+const DEFAULT_PROFILE_KEYWORDS = [
   "code", "script", "program", "implement", "build", "write", "generate",
   "create", "function", "class", "api", "endpoint", "contract", "solidity",
   "web3", "smart contract", "dapp", "frontend", "backend", "typescript",
@@ -91,9 +93,12 @@ interface ArchivedSpec {
 
 export class AgentBot {
   private readonly owner: Wallet;
+  private readonly name: string;
   private readonly groq = new Groq({ apiKey: env.GROQ_API_KEY });
   private readonly model: string;
   private readonly pollMs: number;
+  private readonly acceptAll: boolean;
+  private readonly profile: readonly string[];
 
   // The account that IS the bot on TaskPay (factory-derived SimpleAccount).
   private account: string | null = null;
@@ -111,10 +116,13 @@ export class AgentBot {
   ) as unknown as BotContractSurface;
   private readonly iface = new Interface([...abi, ...BOT_ABI]);
 
-  constructor() {
-    this.owner = new Wallet(env.AGENT_BOT_PRIVATE_KEY!);
-    this.model = env.AGENT_BOT_MODEL || "openai/gpt-oss-120b";
-    this.pollMs = (env.AGENT_BOT_POLL_SECONDS ?? 12) * 1000;
+  constructor(spec: AgentBotSpec) {
+    this.owner = new Wallet(spec.privateKey);
+    this.name = spec.name;
+    this.model = spec.model || "openai/gpt-oss-120b";
+    this.pollMs = (spec.pollSeconds ?? 12) * 1000;
+    this.acceptAll = spec.acceptAll;
+    this.profile = spec.profile || [...DEFAULT_PROFILE_KEYWORDS];
   }
 
   async start(): Promise<void> {
@@ -133,16 +141,17 @@ export class AgentBot {
     });
     this.account = quote.sender;
     logger.info("agent_bot_identity", {
-      name: env.AGENT_BOT_NAME,
+      name: this.name,
       owner: this.owner.address,
       account: this.account,
       deployed: quote.isDeployed,
-      profile: env.AGENT_BOT_ACCEPT_ALL
-        ? "accept-all (AGENT_BOT_ACCEPT_ALL=true)"
-        : `keyword profile (${PROFILE_KEYWORDS.length} terms)`,
+      profile: this.acceptAll
+        ? "accept-all"
+        : `keyword profile (${this.profile.length} terms)`,
     });
     logger.info("agent_bot_starting", {
-      pollSeconds: env.AGENT_BOT_POLL_SECONDS ?? 12,
+      name: this.name,
+      pollSeconds: this.pollMs / 1000,
       // Designate this address as the agent on /create to have the bot do the work.
       hint: "create tasks with agent = " + this.account,
     });
@@ -255,6 +264,7 @@ export class AgentBot {
     if (recomputed !== task.specHash.toLowerCase()) {
       this.declined.add(key);
       logger.warn("agent_bot_spec_mismatch", {
+        name: this.name,
         taskId: key,
         onChainSpecHash: task.specHash,
         archivedSpecHash: recomputed,
@@ -264,9 +274,10 @@ export class AgentBot {
       return;
     }
 
-    if (!env.AGENT_BOT_ACCEPT_ALL && !PROFILE_KEYWORDS.some((k) => spec.text.toLowerCase().includes(k))) {
+    if (!this.acceptAll && !this.profile.some((k) => spec.text.toLowerCase().includes(k))) {
       this.declined.add(key);
       logger.info("agent_bot_declined", {
+        name: this.name,
         taskId: key,
         reason: "does not match the bot's profile",
         specSnippet: spec.text.slice(0, 120),
@@ -280,13 +291,13 @@ export class AgentBot {
     // Deliberately NOT sticky (unlike profile mismatches): the floor is
     // re-evaluated each tick, so newly earned ratings unlock still-open work.
     if (!(await this.meetsRatingFloor(id))) {
-      logger.info("agent_bot_rating_floor_blocked", { taskId: key, minRating: await this.minRating(id) });
+      logger.info("agent_bot_rating_floor_blocked", { name: this.name, taskId: key, minRating: await this.minRating(id) });
       return;
     }
 
     try {
       const res = await this.op("acceptTask", [id]);
-      logger.info("agent_bot_accepted", { taskId: key, txHash: res.txHash });
+      logger.info("agent_bot_accepted", { name: this.name, taskId: key, txHash: res.txHash });
     } catch (err) {
       // Benign race: a previous tick's accept (or a manual call from the
       // owner wallet) confirmed between our status read and this send.
@@ -295,6 +306,7 @@ export class AgentBot {
       const live = (await this.taskpay.getTask(id)) as unknown as TaskStruct;
       if (Number(live.status) !== Status.Created) {
         logger.info("agent_bot_accept_noop", {
+          name: this.name,
           taskId: key,
           status: Number(live.status),
           error: err instanceof Error ? err.message : String(err),
@@ -320,6 +332,7 @@ export class AgentBot {
       const res = await this.op("submitWork", [id, deliverable]);
       this.submitted.add(key);
       logger.info("agent_bot_submitted", {
+        name: this.name,
         taskId: key,
         txHash: res.txHash,
         chars: deliverable.length,
@@ -333,6 +346,7 @@ export class AgentBot {
       if (Number(live.status) !== Status.Accepted) {
         this.submitted.add(key);
         logger.info("agent_bot_submit_noop", {
+          name: this.name,
           taskId: key,
           status: Number(live.status),
           error: err instanceof Error ? err.message : String(err),
@@ -383,7 +397,7 @@ export class AgentBot {
 
   /** Ask Groq to actually produce the deliverable for the spec. */
   private async generateDeliverable(specText: string): Promise<string> {
-    logger.info("agent_bot_generating", { model: this.model, specSnippet: specText.slice(0, 120) });
+    logger.info("agent_bot_generating", { name: this.name, model: this.model, specSnippet: specText.slice(0, 120) });
     const response = await this.groq.chat.completions.create({
       model: this.model,
       // Generous ceiling: at 900 tokens gpt-oss-120b repeatedly hit
@@ -395,7 +409,7 @@ export class AgentBot {
         {
           role: "system",
           content:
-            `You are ${env.AGENT_BOT_NAME}, an autonomous agent working on TaskPay. ` +
+            `You are ${this.name}, an autonomous agent working on TaskPay. ` +
             "Produce the actual deliverable a contractor would hand in for the task below " +
             "(working code, a document, an artifact — whatever the task asks for). " +
             "Output ONLY the deliverable itself: no commentary, no headings about what you did, " +

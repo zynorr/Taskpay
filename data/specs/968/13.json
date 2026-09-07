@@ -1,0 +1,8 @@
+{
+  "chain_id": 968,
+  "task_id": 13,
+  "spec_text": "Write a concise technical report (max 350 words) explaining what ERC-4337 account abstraction is, how the SimpleAccount factory derives counterfactual addresses, and why TaskPay sponsors gas through a VerifyingPaymaster. Save it as REPORT.md with a title and three sections.",
+  "spec_hash": "0xd143a8c1c0f8b95b88fd49280eb04abf7cbfccf867086f0716b329b543697d75",
+  "name": "Write a short technical report",
+  "created_at": "2026-09-07T09:43:12.500Z"
+}

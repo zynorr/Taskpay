@@ -140,12 +140,13 @@ A task either names its agent or is posted to the open pool:
 | Gas | **Gasless-only UX**: every write is a sponsored UserOp; the wallet's only job is signing one hash |
 | Dogfooding | The oracle can run an **autonomous agent bot** so agent work on TaskPay is demonstrated by a real, always-on worker |
 
-## Autonomous agent bot
+## Autonomous agent bots
 
-The oracle can adopt an extra wallet (`AGENT_BOT_PRIVATE_KEY`) and run a **self-operating worker** —
-a distinct on-chain identity whose TaskPay role is the factory-derived SimpleAccount of that key
-(salt 0, the same derivation every user gets). Post a task with that account as the **Agent** on
-`/create` and the bot does the work:
+The oracle can run one or more **self-operating workers** — distinct on-chain identities, each
+whose TaskPay role is the factory-derived SimpleAccount of its own key (salt 0, the same derivation
+every user gets). Post a task with an agent's account as the **Agent** on `/create`, or post an
+**open** task (`agent` unset) and every bot races to claim it first-come-first-served. Each bot does
+the work:
 
 1. **Accept.** Each poll tick it lists tasks where it is the designated agent (`getTasksFor`)
    **plus every task in the open pool** (`getOpenTasks`), so it also plays the first-come,
@@ -153,8 +154,10 @@ a distinct on-chain identity whose TaskPay role is the factory-derived SimpleAcc
    lands in a polled block (event hook first, poll tick as the fallback). Before claiming, it
    verifies the archived spec text (`data/specs/<chainId>/<taskId>.json`) **hashes to the task's
    on-chain `specHash`** — a forged or stale archive row is declined, never worked on — checks a
-   keyword profile unless `AGENT_BOT_ACCEPT_ALL=true`, and pre-checks any `minRating` floor so
-   it never burns a sponsored op on a guaranteed revert. Then it claims, gasless.
+   keyword profile unless the bot is `acceptAll`, and pre-checks any `minRating` floor so it never
+   burns a sponsored op on a guaranteed revert. Then it claims, gasless. Only one bot can win a
+   given task (the chain locks it to the first claimer); the losers see the task already taken and
+   move on — so several bots genuinely compete for the open pool.
 2. **Work.** It asks Groq for the actual deliverable the spec asks for and submits it
    (`submitWork`). Deliverables are capped at 2,000 characters because the submission text is
    stored on-chain; a response cut off by `max_tokens` is refused rather than submitted truncated.
@@ -168,11 +171,20 @@ submit are idempotent across restarts (after an on-chain revert it re-reads the 
 an already-transitioned task as a no-op), and every tick is timeout-guarded so a stalled RPC can
 only skip a cycle, never wedge the daemon.
 
-To run it yourself, set `AGENT_BOT_PRIVATE_KEY` (plus optional `AGENT_BOT_NAME`,
-`AGENT_BOT_POLL_SECONDS`, `AGENT_BOT_MODEL`, `AGENT_BOT_ACCEPT_ALL`) in `taskpay/.env`. The live
-testnet deployment and the address to designate on `/create` are in `DEPLOY.md` and
-`docs/TESTNET-GUIDE.md`; `scripts/live_agent_bot.mjs` drives the whole requester-side lifecycle
-against a running bot.
+To run it yourself, configure the roster in `taskpay/.env`:
+
+- **Multi-agent (recommended):** `AGENT_BOTS` is a JSON array, one entry per competing identity,
+  each with a `key` (the EOA owning that agent's SimpleAccount) and optional `name`, `model`,
+  `pollSeconds`, `acceptAll`, and `profile` (keyword list that specializes which specs the agent
+  takes). Entries inherit the shared `AGENT_BOT_*` vars as defaults.
+  `AGENT_BOTS=[{"key":"0x…","name":"DevBot","acceptAll":true},{"key":"0x…","name":"Aria"},{"key":"0x…","name":"Koda","profile":["documentation"]}]`
+- **Legacy single bot:** `AGENT_BOT_PRIVATE_KEY` (plus optional `AGENT_BOT_NAME`,
+  `AGENT_BOT_POLL_SECONDS`, `AGENT_BOT_MODEL`, `AGENT_BOT_ACCEPT_ALL`) — still supported; when
+  `AGENT_BOTS` is set it wins.
+
+The live testnet deployment and the address to designate on `/create` are in `DEPLOY.md` and
+`docs/TESTNET-GUIDE.md`; `scripts/live_open_task.mjs` drives the whole requester-side lifecycle
+(open task → first bot claims → submits → release + rate) against the running roster.
 
 ## Repository layout
 

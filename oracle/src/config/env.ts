@@ -48,6 +48,12 @@ export interface OracleEnv {
   AGENT_BOT_POLL_SECONDS?: number;
   AGENT_BOT_ACCEPT_ALL?: boolean;
   AGENT_BOT_MODEL?: string;
+  // AGENT_BOTS is the multi-agent roster: a JSON array that REPLACES the
+  // single AGENT_BOT_PRIVATE_KEY config (legacy vars above are still the
+  // fallback when it is absent). Each entry spawns one competing agent
+  // identity — see AgentBotSpec below. Fields omitted per entry inherit the
+  // shared AGENT_BOT_* defaults (poll cadence, model, accept-all).
+  AGENT_BOT_SPECS?: AgentBotSpec[];
 }
 
 function isValidUrl(value: string): boolean {
@@ -57,6 +63,23 @@ function isValidUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * One competing agent identity. `privateKey` is the EOA that owns the
+ * SimpleAccount acting on TaskPay; each key is a distinct on-chain identity.
+ * `profile` optionally narrows which task specs the bot will take (keyword
+ * match against the archived spec text); undefined means the built-in
+ * default keyword profile. `pollSeconds`/`model`/`acceptAll` fall back to the
+ * shared AGENT_BOT_* env defaults, then to code defaults.
+ */
+export interface AgentBotSpec {
+  privateKey: string;
+  name: string;
+  model?: string;
+  pollSeconds?: number;
+  acceptAll: boolean;
+  profile?: string[];
 }
 
 function isValidPrivateKey(value: string): boolean {
@@ -133,6 +156,59 @@ function validate(): OracleEnv {
     agentBotPollSeconds = parsePositiveInt(raw.AGENT_BOT_POLL_SECONDS, "AGENT_BOT_POLL_SECONDS", errors);
   }
 
+  // Multi-agent roster (AGENT_BOTS). When present it is authoritative and the
+  // single-bot vars above are ignored for roster building (still used as
+  // shared per-entry defaults). Each entry is validated independently so one
+  // bad row reports its own error instead of failing the whole parse.
+  let agentBotSpecs: AgentBotSpec[] | undefined;
+  const rosterRaw = raw.AGENT_BOTS;
+  if (rosterRaw !== undefined && rosterRaw.trim() !== "") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rosterRaw);
+    } catch (e) {
+      errors.push(`AGENT_BOTS must be a JSON array of agent configs — parse failed: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    agentBotSpecs = [];
+    if (Array.isArray(parsed)) {
+      const acceptAllDefault = raw.AGENT_BOT_ACCEPT_ALL === "true";
+      parsed.forEach((b, i) => {
+        if (!b || typeof b !== "object") {
+          errors.push(`AGENT_BOTS[${i}] must be an object with at least a \"key\".`);
+          return;
+        }
+        const { key, name, model, pollSeconds, acceptAll, profile } = b as Record<string, unknown>;
+        if (typeof key !== "string" || !isValidPrivateKey(key)) {
+          errors.push(`AGENT_BOTS[${i}].key must be a 0x-prefixed 32-byte hex string.`);
+          return;
+        }
+        const specPoll =
+          typeof pollSeconds === "number" && Number.isInteger(pollSeconds) && pollSeconds > 0
+            ? pollSeconds
+            : agentBotPollSeconds;
+        if (typeof pollSeconds === "number" && !(Number.isInteger(pollSeconds) && pollSeconds > 0)) {
+          errors.push(`AGENT_BOTS[${i}].pollSeconds must be a positive integer.`);
+        }
+        if (model !== undefined && typeof model !== "string") {
+          errors.push(`AGENT_BOTS[${i}].model must be a string.`);
+        }
+        if (profile !== undefined && (!Array.isArray(profile) || profile.some((k) => typeof k !== "string"))) {
+          errors.push(`AGENT_BOTS[${i}].profile must be an array of keyword strings.`);
+        }
+        agentBotSpecs!.push({
+          privateKey: key,
+          name: typeof name === "string" && name.trim() ? name.trim() : `Agent ${i + 1}`,
+          model: typeof model === "string" && model ? model : raw.AGENT_BOT_MODEL || raw.GROQ_MODEL || undefined,
+          pollSeconds: specPoll,
+          acceptAll: typeof acceptAll === "boolean" ? acceptAll : acceptAllDefault,
+          profile: Array.isArray(profile) ? (profile as string[]).map((k) => k.toLowerCase()) : undefined,
+        });
+      });
+    } else if (parsed !== undefined) {
+      errors.push("AGENT_BOTS must be a JSON array of agent configs.");
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(`Invalid oracle environment configuration:\n${errors.map((e) => `  - ${e}`).join("\n")}`);
   }
@@ -158,7 +234,30 @@ function validate(): OracleEnv {
     AGENT_BOT_POLL_SECONDS: agentBotPollSeconds,
     AGENT_BOT_ACCEPT_ALL: raw.AGENT_BOT_ACCEPT_ALL === "true",
     AGENT_BOT_MODEL: raw.AGENT_BOT_MODEL || raw.GROQ_MODEL || undefined,
+    AGENT_BOT_SPECS: agentBotSpecs,
   };
 }
 
 export const env: OracleEnv = validate();
+
+/**
+ * The full agent roster the oracle should run. AGENT_BOTS (when configured) is
+ * authoritative — it may even be an empty array (run zero agents). Without it,
+ * the legacy single-bot AGENT_BOT_PRIVATE_KEY config builds a one-entry roster.
+ */
+export function agentBotSpecs(): AgentBotSpec[] {
+  if (env.AGENT_BOT_SPECS) return env.AGENT_BOT_SPECS;
+  if (env.AGENT_BOT_PRIVATE_KEY) {
+    return [
+      {
+        privateKey: env.AGENT_BOT_PRIVATE_KEY,
+        name: env.AGENT_BOT_NAME || "DevBot",
+        model: env.AGENT_BOT_MODEL,
+        pollSeconds: env.AGENT_BOT_POLL_SECONDS,
+        acceptAll: env.AGENT_BOT_ACCEPT_ALL ?? false,
+        profile: undefined,
+      },
+    ];
+  }
+  return [];
+}
