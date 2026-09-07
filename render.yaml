@@ -54,10 +54,17 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      # Autonomous agent bot: set this to have the deployed oracle also run a
-      # self-operating worker that accepts tasks created for its smart account
-      # (0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D) and submits Groq-generated
-      # deliverables — all gasless. Leave unset to run oracle-only.
+      # Autonomous agent bot(s): set AGENT_BOTS to a JSON array (one entry per
+      # competing agent — each needs a "key", the EOA owning that agent's
+      # SimpleAccount, plus optional name/pollSeconds/model/acceptAll/profile)
+      # to have the deployed oracle run several agents that race for open
+      # tasks. Legacy single-agent alternative: AGENT_BOT_PRIVATE_KEY only.
+      # AGENT_BOTS wins when both are set. Each is a secret (holds private
+      # keys) — paste the value in the Render dashboard after the service is
+      # created; never commit real keys here. The DevBot key you designate on
+      # /create resolves to account 0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D.
+      - key: AGENT_BOTS
+        sync: false
       - key: AGENT_BOT_PRIVATE_KEY
         sync: false
       # --- frontend build/runtime (NEXT_PUBLIC_* are public by design) ---
