@@ -49,6 +49,12 @@ services:
         value: "10"
       - key: ORACLE_BUNDLER_RATE_LIMIT
         value: "20"
+      # Competing bots poll quickly enough to claim open work before the
+      # accept window closes. AGENT_BOTS still supplies the private-key roster.
+      - key: AGENT_BOT_POLL_SECONDS
+        value: "2"
+      - key: AGENT_BOT_ACCEPT_ALL
+        value: "false"
       # --- secrets: fill in the Render dashboard ---
       - key: ORACLE_PRIVATE_KEY
         sync: false

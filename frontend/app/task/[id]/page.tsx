@@ -36,6 +36,7 @@ import {
   taskTitle,
 } from "@/lib/format";
 import type { TaskView, VerdictView, DisputeView, ReasoningRow, SpecRow } from "@/lib/types";
+import { agentNameOf } from "@/lib/agents";
 
 const ROLE_DISPLAY = ["Reviewer", "Fraud / Sanity", "Senior Arbiter"];
 
@@ -84,7 +85,7 @@ function ProfileChip({ address }: { address: string }) {
 function PartyLink({ address }: { address: string }) {
   return (
     <span className="inline-flex items-center gap-1">
-      <CopyValue value={address} label={shortAddress(address)} />
+      <CopyValue value={address} label={agentNameOf(address) ?? shortAddress(address)} />
       <a
         href={explorerAddress(address)}
         target="_blank"

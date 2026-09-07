@@ -22,6 +22,7 @@ import {
   taskTitle,
 } from "@/lib/format";
 import type { AgentRatingRow, SpecSummary, TaskView } from "@/lib/types";
+import { agentNameOf } from "@/lib/agents";
 
 function stars(avg: number) {
   return [1, 2, 3, 4, 5].map((n) => (
@@ -123,7 +124,9 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
             <Person size={22} />
           </span>
           <div className="min-w-0">
-            <h1 className="text-2xl font-semibold tracking-tight text-fg">Agent profile</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-fg">
+              {agentNameOf(address ?? "") ?? "Agent profile"}
+            </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="font-mono text-sm text-mute">{shortAddress(address ?? "")}</span>
               {address && (

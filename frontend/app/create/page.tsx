@@ -38,6 +38,7 @@ import {
   Star,
   Wallet,
 } from "@/components/icons";
+import { agentLabel } from "@/lib/agents";
 
 const ACCEPT_OPTIONS = [600, 3600, 21600, 86400];
 const WORK_OPTIONS = [3600, 21600, 86400, 259200, 604800];
@@ -593,7 +594,7 @@ export default function CreateTaskPage() {
                         ? `Open · ${minRating}+ rating required`
                         : "Open — first to accept"
                       : agentValid
-                        ? shortAddress(agent.trim())
+                        ? agentLabel(agent.trim())
                         : "—"}
                   </dd>
                 </div>

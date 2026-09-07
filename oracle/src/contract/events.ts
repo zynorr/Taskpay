@@ -245,25 +245,27 @@ export class ContractEventPoller {
           this.sources.map((source) => rawContract.queryFilter(source.filterName, windowStart, windowEnd)),
         );
 
+        const handlerTasks: Promise<void>[] = [];
         for (let i = 0; i < this.sources.length; i++) {
           const source = this.sources[i]!;
           for (const log of results[i]!) {
             const eventLog = log as EventLog;
-            const key = `${eventLog.transactionHash}:${eventLog.index}`;
+            const key = `${i}:${eventLog.transactionHash}:${eventLog.index}`;
             if (this.processedKeys.has(key)) continue;
             this.processedKeys.set(key, eventLog.blockNumber);
-            // Isolate per-event failures: one task's error must not block the
-            // rest of the batch (each handler also try/catches internally).
-            try {
-              await source.handler(source.parse(eventLog));
-            } catch (err) {
-              logger.error("event_handler_failed", {
-                filter: source.filterName,
-                error: err instanceof Error ? err.message : String(err),
-              });
-            }
+            handlerTasks.push(
+              Promise.resolve()
+                .then(() => source.handler(source.parse(eventLog)))
+                .catch((err: unknown) => {
+                  logger.error("event_handler_failed", {
+                    filter: source.filterName,
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                }),
+            );
           }
         }
+        await Promise.all(handlerTasks);
 
         this.lastProcessedBlock = windowEnd;
         windowStart = windowEnd + 1;

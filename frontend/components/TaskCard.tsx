@@ -14,6 +14,7 @@ import {
 } from "@/lib/format";
 import { Status } from "@/lib/contract";
 import type { TaskView, DisputeView, SpecSummary } from "@/lib/types";
+import { agentLabel } from "@/lib/agents";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
@@ -191,7 +192,7 @@ export default function TaskCard({
             className="font-mono text-mute transition hover:text-accent"
             title="Agent profile"
           >
-            {shortAddress(task.agent)}
+            {agentLabel(task.agent)}
           </Link>
         )}
         {stateLine && (
