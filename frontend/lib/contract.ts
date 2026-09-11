@@ -1,8 +1,8 @@
-// Canonical TaskPay deployment on BOT Chain testnet (968).
+// Canonical TaskPay deployment on BOT Chain mainnet (677).
 // Redeployed from the current tested source — see DEPLOY.md.
 export const CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_TASKPAY_CONTRACT as `0x${string}` | undefined) ??
-  "0x7E159665DF732136dfA3E702d49874095fDf90c5";
+  "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7";
 
 export const TASKPAY_ABI = [
   // --- Views ---

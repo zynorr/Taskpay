@@ -31,11 +31,11 @@ services:
     envVars:
       # --- chain / sponsor stack (public constants) ---
       - key: RPC_URL
-        value: https://rpc.bohr.life
+        value: "https://rpc.botchain.ai"
       - key: CHAIN_ID
-        value: "968"
+        value: "677"
       - key: CONTRACT_ADDRESS
-        value: "0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46"
+        value: "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7"
       - key: ENTRY_POINT
         value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - key: AA_FACTORY
@@ -77,9 +77,9 @@ services:
       - key: NEXT_PUBLIC_BUNDLER_URL
         value: /api/bundler
       - key: NEXT_PUBLIC_CHAIN_ID
-        value: "968"
+        value: "677"
       - key: NEXT_PUBLIC_TASKPAY_CONTRACT
-        value: "0xCd57fC7d37E9D124493AC78A94E96FC96D1D8E46"
+        value: "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7"
       - key: NEXT_PUBLIC_ENTRY_POINT
         value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - key: NEXT_PUBLIC_AA_FACTORY

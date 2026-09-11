@@ -33,4 +33,4 @@ export const botChainMainnet = defineChain({
 });
 
 // Chain the frontend targets by default. Flip to botChainMainnet for 677.
-export const targetChain = botChainTestnet;
+export const targetChain = botChainMainnet;
