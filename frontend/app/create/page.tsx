@@ -451,8 +451,7 @@ export default function CreateTaskPage() {
                   </div>
                   {!floorSupported && (
                     <p className="mt-1.5 text-[11px] text-warn">
-                      Rating floors need the next contract deployment (current testnet contract is
-                      pre-v3) — floors are accepted in the UI but blocked at submit until then.
+                      Rating floors need the next contract deployment — floors are accepted in the UI but blocked at submit until then.
                     </p>
                   )}
                   <p className="mt-1.5 text-[11px] text-faint">

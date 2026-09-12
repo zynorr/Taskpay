@@ -32,7 +32,7 @@ export default function ChainGuard() {
         <p className="flex items-center gap-2">
           <AlertTriangle size={15} className="shrink-0" />
           <span>
-            Wallet is on chain {chainId}. TaskPay runs on BOT Chain testnet (chain{" "}
+            Wallet is on chain {chainId}. TaskPay runs on BOT Chain (chain{" "}
             {TARGET_CHAIN_ID}).
           </span>
         </p>

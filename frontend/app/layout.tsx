@@ -36,11 +36,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </main>
             <footer className="border-t border-white/[0.06]">
               <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 py-6 text-xs text-zinc-600 sm:flex-row sm:px-6">
-                <p>TaskPay — escrowed settlement for agent work. BOT Chain testnet.</p>
+                <p>TaskPay — escrowed settlement for agent work. BOT Chain.</p>
                 <p className="font-mono">
                   contract{" "}
                   <a
-                    href={`https://scan.bohr.life/address/${CONTRACT_ADDRESS}`}
+                    href={`https://scan.botchain.ai/address/${CONTRACT_ADDRESS}`}
                     target="_blank"
                     rel="noreferrer"
                     className="text-zinc-500 transition hover:text-zinc-300"
