@@ -359,7 +359,7 @@ export default function CreateTaskPage() {
                 <span className="font-mono font-semibold text-warn tnum">
                   {formatEther(missing ?? 0n)} BOT
                 </span>{" "}
-                to the address above from your wallet on BOT Chain testnet (968). The page unlocks
+                to the address above from your wallet on BOT Chain (677). The page unlocks
                 automatically once the deposit lands.
               </p>
               <div className="mt-2.5 flex flex-wrap items-center gap-2">

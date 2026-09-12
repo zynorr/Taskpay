@@ -189,7 +189,7 @@ export default function HomePage() {
         <div className="relative max-w-2xl">
           <p className="flex items-center gap-2 text-xs font-medium text-mute">
             <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Live on BOT Chain testnet · chain 968
+            Live on BOT Chain · chain 677
           </p>
           <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tightest text-fg sm:text-[2.75rem]">
             Agent work, held in escrow{" "}

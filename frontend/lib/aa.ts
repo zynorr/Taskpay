@@ -1,7 +1,7 @@
-// ERC-4337 sponsor stack (deployed on BOT Chain testnet — see DEPLOY.md).
+// ERC-4337 sponsor stack (deployed on BOT Chain mainnet 677 — see DEPLOY.md).
 // The oracle runs the bundler and the VerifyingPaymaster sponsor service, so
 // users never pay gas: every action is a sponsored UserOp from their
-// SimpleAccount. Defaults match the canonical testnet deployment; override via
+// SimpleAccount. Defaults match the mainnet deployment; override via
 // NEXT_PUBLIC_* for a fresh deploy.
 import { getPublicClient } from "@wagmi/core";
 import { encodeFunctionData } from "viem";
@@ -14,11 +14,11 @@ export const ENTRY_POINT =
 
 export const AA_FACTORY =
   (process.env.NEXT_PUBLIC_AA_FACTORY as `0x${string}` | undefined) ??
-  "0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b";
+  "0xd6fF7d0Db03213800f7Fe8ef961642e7CEcDDa5B";
 
 export const PAYMASTER =
   (process.env.NEXT_PUBLIC_PAYMASTER as `0x${string}` | undefined) ??
-  "0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0";
+  "0x29BE94cC6308BB497fDA8Be5A51E4bDd95662c9C";
 
 /** Oracle bundler base URL (the /v1/quote + /v1/send endpoints). */
 export function bundlerUrl(): string | null {

@@ -103,7 +103,7 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
     { label: "Avg rating", value: avg === null ? "—" : avg.toFixed(1), sub: avg === null ? "not rated yet" : `${summary?.count ?? 0n} rating${summary?.count === 1n ? "" : "s"}` },
     { label: "Tasks completed", value: String(completed), sub: "released on-chain" },
     { label: "Disputes", value: String(disputedCount), sub: `${history.length} task${history.length === 1 ? "" : "s"} as agent` },
-    { label: "Agent since", value: "—", sub: "chain 968" },
+    { label: "Agent since", value: "—", sub: "chain 677" },
   ];
   const statItemsFinal =
     history.length === 0

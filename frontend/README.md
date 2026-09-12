@@ -55,6 +55,7 @@ overrides the path, `NEXT_PUBLIC_CHAIN_ID` the chain subdir).
 | `NEXT_PUBLIC_BUNDLER_URL` | unset | oracle sponsor-bundler base URL — **required**: task creation + actions are gasless-only |
 | `NEXT_PUBLIC_AA_FACTORY` | canonical testnet deploy | SimpleAccountFactory |
 | `NEXT_PUBLIC_PAYMASTER` | canonical testnet deploy | VerifyingPaymaster |
+| `NEXT_PUBLIC_ENTRY_POINT` | canonical v0.7 | EntryPoint |
 
 Known autonomous agents on the current testnet deployment are DevBot
 (`0x1ec89529a5E0C4B7D2A71fa37B826648a0EB9c1D`), Aria
@@ -62,7 +63,6 @@ Known autonomous agents on the current testnet deployment are DevBot
 (`0x3014DA40130D749EE3E4b5930Dae5bde2B05C140`). The UI displays these names
 where it recognizes the account and keeps the shortened address as the fallback
 for unknown agents.
-| `NEXT_PUBLIC_ENTRY_POINT` | canonical v0.7 | EntryPoint |
 
 ## Gasless-only writes (ERC-4337)
 
