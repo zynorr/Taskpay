@@ -52,8 +52,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="flex flex-col gap-3 sm:items-end">
                     <span className="micro">Ecosystem</span>
                     <div className="flex items-center gap-3">
-                      <span className="flex h-9 shrink-0 items-center overflow-hidden rounded-lg border border-line bg-black">
-                        <img src="/botchain.svg" alt="BOT Chain" className="h-full w-auto" />
+                      <span className="flex h-10 shrink-0 items-center rounded-lg border border-line bg-subtle px-2">
+                        <img src="/botchain.svg" alt="BOT Chain" className="botchain-logo h-7 w-auto" />
                       </span>
                       <div className="flex flex-col">
                         <a

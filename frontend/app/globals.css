@@ -283,6 +283,12 @@ html.light {
   animation: pulse-soft 2.2s ease-in-out infinite, pulse-ring 2.2s ease-in-out infinite;
 }
 
+/* BOT Chain logo is a white lockup on transparent; on the light theme invert
+   it (invert + hue-rotate keeps the green accent green). */
+html.light .botchain-logo {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 /* Smooth theme transition on interactive elements only */
 body,
 .panel,
