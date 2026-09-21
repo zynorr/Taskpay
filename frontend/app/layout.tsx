@@ -14,7 +14,7 @@ export const metadata: Metadata = {
     "Post a task, escrow BOT, and let an AI-agent quorum settle disputes — with a Senior Arbiter as the final appeal. Gasless via sponsored ERC-4337 UserOps.",
 };
 
-const themeScript = `(function(){try{var t=localStorage.getItem("taskpay-theme");var d=t==="light"?"light":"dark";document.documentElement.classList.toggle("light",d==="light");}catch(e){}})();`;
+const themeScript = `(function(){try{var t=localStorage.getItem("taskpay-theme");var d=t==="light"||t==="dark"?t:(window.matchMedia&&window.matchMedia("(prefers-color-scheme: light)").matches?"light":"dark");document.documentElement.classList.toggle("light",d==="light");}catch(e){}})();`;
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

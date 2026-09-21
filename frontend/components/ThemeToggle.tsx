@@ -23,6 +23,7 @@ export default function ThemeToggle() {
     try {
       const saved = localStorage.getItem(KEY);
       if (saved === "light" || saved === "dark") initial = saved;
+      else if (window.matchMedia("(prefers-color-scheme: light)").matches) initial = "light";
     } catch {
       /* ignore */
     }

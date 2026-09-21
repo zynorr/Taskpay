@@ -1,9 +1,14 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { EventLog } from "ethers";
-import { rawContract, provider } from "./client.js";
+import { Interface, type EventFilter, type EventLog, type Log } from "ethers";
+import { rawContract, provider, wsProvider } from "./client.js";
 import { env } from "../config/env.js";
 import { logger } from "../lib/logger.js";
+import abi from "./TaskPay.abi.json" with { type: "json" };
+
+// Topic filters for the WS subscription are built from the same ABI the contract
+// clients use, so event names can never drift from their on-chain signatures.
+const contractInterface = new Interface(abi);
 
 type FilterName = "DisputeRaised" | "ChallengeRaised" | "TaskCreated";
 
@@ -34,6 +39,10 @@ const MAX_BLOCK_RANGE = 2000;
 
 // Process-lifetime dedup window, sized far beyond any realistic reorg depth.
 const DEDUP_RETENTION_BLOCKS = 20_000;
+
+// WS mode never runs the HTTP poll's prune step, so the dedup map is pruned
+// inside dispatch() instead, throttled to once per this many blocks.
+const PRUNE_INTERVAL_BLOCKS = 1000;
 
 export interface DisputeRaisedEvent {
   taskId: bigint;
@@ -88,9 +97,11 @@ export class ContractEventPoller {
   private readonly startBlockOverride: number | null;
   private readonly processedKeys = new Map<string, number>(); // key -> blockNumber
   private readonly sources: EventSource<unknown>[] = [];
+  private readonly wsSubscriptions: { filter: EventFilter; listener: (log: Log) => void }[] = [];
   private timer?: NodeJS.Timeout;
   private polling = false;
   private currentTick: Promise<void> = Promise.resolve();
+  private nextPruneBlock = 0;
 
   constructor(startBlock: number | null = startBlockOverride ?? null) {
     this.startBlockOverride = startBlock;
@@ -203,7 +214,78 @@ export class ContractEventPoller {
     return this;
   }
 
+  // Shared dedup + handler dispatch for one event log. Both the WS live stream
+  // and the HTTP poll backfill feed through here so an event is handled exactly
+  // once regardless of which path (or both) delivered it. Dedup is applied
+  // synchronously before the handler runs, so even fire-and-forget WS calls
+  // can't double-handle.
+  private dispatch(sourceIndex: number, source: EventSource<unknown>, eventLog: EventLog): Promise<void> {
+    const key = `${sourceIndex}:${eventLog.transactionHash}:${eventLog.index}`;
+    if (this.processedKeys.has(key)) return Promise.resolve();
+    this.processedKeys.set(key, eventLog.blockNumber);
+
+    // In WS mode tick() never runs, so its end-of-tick prune never fires;
+    // prune here (throttled) to keep the dedup map bounded on mainnet.
+    if (eventLog.blockNumber >= this.nextPruneBlock) {
+      this.nextPruneBlock = eventLog.blockNumber + PRUNE_INTERVAL_BLOCKS;
+      const pruneBefore = eventLog.blockNumber - DEDUP_RETENTION_BLOCKS;
+      for (const [k, blockNumber] of this.processedKeys) {
+        if (blockNumber < pruneBefore) this.processedKeys.delete(k);
+      }
+    }
+
+    return Promise.resolve()
+      .then(() => source.handler(source.parse(eventLog)))
+      .catch((err: unknown) => {
+        logger.error("event_handler_failed", {
+          filter: source.filterName,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+  }
+
+  // Live event ingestion over WebSocket (eth_subscribe). Required on mainnet
+  // (chain 677), where the public HTTP RPC disables eth_getLogs. One filter per
+  // source; ethers re-subscribes on reconnect. There is no historical backfill
+  // in WS mode — the chain offers no eth_getLogs to replay from, so a cold boot
+  // only sees events that land after the subscription is live.
+  private subscribe(): void {
+    const ws = wsProvider;
+    if (!ws) return;
+    logger.info("event_poller_ws_subscribing", {
+      url: env.WSS_RPC_URL,
+      filters: this.sources.map((s) => s.filterName),
+    });
+    this.sources.forEach((source, index) => {
+      const fragment = contractInterface.getEvent(source.filterName);
+      if (!fragment) {
+        logger.warn("event_poller_ws_missing_event", { event: source.filterName });
+        return;
+      }
+      const filter: EventFilter = { address: env.CONTRACT_ADDRESS, topics: [fragment.topicHash] };
+      const listener = (log: Log): void => {
+        void this.dispatch(index, source, log as EventLog);
+      };
+      this.wsSubscriptions.push({ filter, listener });
+      void ws.on(filter, listener);
+    });
+    ws.on("error", this.onWsError);
+  }
+
+  private readonly onWsError = (err: unknown): void => {
+    // A dropped socket must never take the oracle down: log it and let ethers'
+    // reconnect (and the next event) recover. Never throws.
+    logger.warn("event_poller_ws_error", { error: err instanceof Error ? err.message : String(err) });
+  };
+
   start(): void {
+    // WS mode (WSS_RPC_URL set): live events arrive via eth_subscribe — the only
+    // log path mainnet exposes. Skip the HTTP poll loop entirely: its
+    // queryFilter (eth_getLogs) is disabled on mainnet and would only error.
+    if (wsProvider) {
+      this.subscribe();
+      return;
+    }
     this.timer = setInterval(() => {
       this.currentTick = this.tick().catch((err: unknown) => {
         logger.error("event_poller_tick_failed", { error: err instanceof Error ? err.message : String(err) });
@@ -216,6 +298,11 @@ export class ContractEventPoller {
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
+    if (wsProvider) {
+      for (const sub of this.wsSubscriptions) void wsProvider.off(sub.filter, sub.listener);
+      void wsProvider.off("error", this.onWsError);
+    }
+    this.wsSubscriptions.length = 0;
   }
 
   // Lets shutdown wait for an in-flight tick (and the handlers it started)
@@ -249,20 +336,7 @@ export class ContractEventPoller {
         for (let i = 0; i < this.sources.length; i++) {
           const source = this.sources[i]!;
           for (const log of results[i]!) {
-            const eventLog = log as EventLog;
-            const key = `${i}:${eventLog.transactionHash}:${eventLog.index}`;
-            if (this.processedKeys.has(key)) continue;
-            this.processedKeys.set(key, eventLog.blockNumber);
-            handlerTasks.push(
-              Promise.resolve()
-                .then(() => source.handler(source.parse(eventLog)))
-                .catch((err: unknown) => {
-                  logger.error("event_handler_failed", {
-                    filter: source.filterName,
-                    error: err instanceof Error ? err.message : String(err),
-                  });
-                }),
-            );
+            handlerTasks.push(this.dispatch(i, source, log as EventLog));
           }
         }
         await Promise.all(handlerTasks);

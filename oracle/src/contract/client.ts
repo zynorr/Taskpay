@@ -1,4 +1,4 @@
-import { JsonRpcProvider, Wallet, Contract, type Log } from "ethers";
+import { JsonRpcProvider, WebSocketProvider, Wallet, Contract, type Log } from "ethers";
 import { env } from "../config/env.js";
 import type { TaskPayAbi } from "./types.js";
 import abi from "./TaskPay.abi.json" with { type: "json" };
@@ -6,6 +6,14 @@ import abi from "./TaskPay.abi.json" with { type: "json" };
 export const provider = new JsonRpcProvider(env.RPC_URL, env.CHAIN_ID, {
   staticNetwork: true, // pin to the configured chain; a wrong-RPC mixup should fail loud
 });
+
+// Optional live-log WebSocket provider. Mainnet (chain 677) disables eth_getLogs
+// on the public HTTP RPC, so the event poller needs an eth_subscribe path to
+// receive DisputeRaised/ChallengeRaised/TaskCreated events as they land. Null
+// when WSS_RPC_URL is unset (e.g. testnet, where HTTP eth_getLogs still works).
+export const wsProvider: WebSocketProvider | null = env.WSS_RPC_URL
+  ? new WebSocketProvider(env.WSS_RPC_URL, env.CHAIN_ID, { staticNetwork: true })
+  : null;
 
 export const oracleWallet = new Wallet(env.ORACLE_PRIVATE_KEY, provider);
 

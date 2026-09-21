@@ -40,7 +40,7 @@ function ActionButton({
       {busy ? "Confirming…" : label}
       {!busy && (
         <span className="inline-flex items-center gap-1 rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">
-          <Bolt size={9} /> 0 gas
+          <Bolt size={10} /> 0 gas
         </span>
       )}
     </button>

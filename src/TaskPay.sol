@@ -96,6 +96,15 @@ contract TaskPay is ReentrancyGuard, Ownable {
         uint256 ratedAt;
     }
 
+    /// @dev Portable reputation summary for an agent. Readable by any app:
+    ///      star-rating aggregate plus settled-task count — the two signals
+    ///      TaskPay exports as a single on-chain record.
+    struct Reputation {
+        uint256 totalScore; // sum of star ratings (1..5)
+        uint256 ratingCount; // number of rated (settled) tasks
+        uint256 completedTasks; // number of released (paid) settlements
+    }
+
     // ------------------------------------------------------------------ //
     // State
     // ------------------------------------------------------------------ //
@@ -122,6 +131,10 @@ contract TaskPay is ReentrancyGuard, Ownable {
     mapping(uint256 => uint256) public minRatingOf;
 
     mapping(address => Rating[]) public agentRatings;
+
+    /// @dev Agent-owned human-readable name (e.g. "DevBot"). Empty = unset.
+    ///      Self-sovereign: only the agent's own account can set it.
+    mapping(address => string) public agentNames;
 
     /// @dev Mutual-cancellation votes (Accepted/Submitted only).
     mapping(uint256 => bool) internal _requesterCancelApproved;
@@ -168,6 +181,7 @@ contract TaskPay is ReentrancyGuard, Ownable {
     event SeniorArbiterTimeout(uint256 indexed taskId, bool fallbackApproved);
 
     event AgentRated(uint256 indexed taskId, address indexed agent, uint8 score);
+    event AgentNameSet(address indexed agent, string name);
 
     event OracleUpdated(address indexed oldOracle, address indexed newOracle);
     event ChallengeWindowUpdated(uint256 oldValue, uint256 newValue);
@@ -641,11 +655,33 @@ contract TaskPay is ReentrancyGuard, Ownable {
     /// @notice Number of settled (released) tasks — TaskPay's core reputation
     ///         signal beyond star ratings.
     function getAgentTaskCount(address agent) external view returns (uint256 count) {
-        // Linear scan is acceptable while task counts are small; index tasks
-        // by agent if this becomes a hot path.
+        count = _completedCount(agent);
+    }
+
+    /// @notice The single portable reputation record for an agent: star-rating
+    ///         aggregate plus settled-task count. Downstream apps read this one
+    ///         view instead of the two separate signals.
+    function getAgentReputation(address agent) external view returns (Reputation memory rep) {
+        (rep.totalScore, rep.ratingCount) = _ratingSummary(agent);
+        rep.completedTasks = _completedCount(agent);
+    }
+
+    /// @dev Shared settled-task counter for getAgentTaskCount and
+    ///      getAgentReputation. Linear scan is acceptable while task counts are
+    ///      small; index tasks by agent if this becomes a hot path.
+    function _completedCount(address agent) internal view returns (uint256 count) {
         for (uint256 i = 0; i < taskCount; i++) {
             if (tasks[i].agent == agent && tasks[i].status == Status.Released) count++;
         }
+    }
+
+    /// @notice Agent sets (or clears) its own human-readable name. Max 32 bytes;
+    ///         an empty string clears it. Portable: any app resolves an address
+    ///         to a name via the `agentNames` getter.
+    function setAgentName(string calldata name) external {
+        require(bytes(name).length <= 32, "TaskPay: name too long");
+        agentNames[msg.sender] = name;
+        emit AgentNameSet(msg.sender, name);
     }
 
     // ------------------------------------------------------------------ //

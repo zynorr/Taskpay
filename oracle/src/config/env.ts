@@ -22,6 +22,7 @@ export interface OracleEnv {
   GROQ_API_KEY: string;
   GROQ_MODEL?: string;
   RPC_URL: string;
+  WSS_RPC_URL?: string;
   CHAIN_ID: number;
   CONTRACT_ADDRESS: string;
   POLL_INTERVAL_SECONDS: number;
@@ -44,6 +45,7 @@ export interface OracleEnv {
   // Groq, and submits it — all through the same sponsored gasless path. The
   // bot is a distinct on-chain identity from the oracle operator.
   AGENT_BOT_PRIVATE_KEY?: string;
+  AGENT_BOT_SESSION_KEY?: string;
   AGENT_BOT_NAME?: string;
   AGENT_BOT_POLL_SECONDS?: number;
   AGENT_BOT_ACCEPT_ALL?: boolean;
@@ -75,6 +77,7 @@ function isValidUrl(value: string): boolean {
  */
 export interface AgentBotSpec {
   privateKey: string;
+  sessionKey?: string;
   name: string;
   model?: string;
   pollSeconds?: number;
@@ -121,6 +124,9 @@ function validate(): OracleEnv {
   }
   if (raw.RPC_URL && !isValidUrl(raw.RPC_URL)) {
     errors.push("RPC_URL must be a valid URL.");
+  }
+  if (raw.WSS_RPC_URL && !isValidUrl(raw.WSS_RPC_URL)) {
+    errors.push("WSS_RPC_URL must be a valid URL.");
   }
   if (raw.CONTRACT_ADDRESS && !isAddress(raw.CONTRACT_ADDRESS)) {
     errors.push("CONTRACT_ADDRESS must be a valid Ethereum address.");
@@ -177,7 +183,7 @@ function validate(): OracleEnv {
           errors.push(`AGENT_BOTS[${i}] must be an object with at least a \"key\".`);
           return;
         }
-        const { key, name, model, pollSeconds, acceptAll, profile } = b as Record<string, unknown>;
+        const { key, name, model, pollSeconds, acceptAll, profile, sessionKey } = b as Record<string, unknown>;
         if (typeof key !== "string" || !isValidPrivateKey(key)) {
           errors.push(`AGENT_BOTS[${i}].key must be a 0x-prefixed 32-byte hex string.`);
           return;
@@ -195,8 +201,12 @@ function validate(): OracleEnv {
         if (profile !== undefined && (!Array.isArray(profile) || profile.some((k) => typeof k !== "string"))) {
           errors.push(`AGENT_BOTS[${i}].profile must be an array of keyword strings.`);
         }
+        if (sessionKey !== undefined && (typeof sessionKey !== "string" || !isValidPrivateKey(sessionKey))) {
+          errors.push(`AGENT_BOTS[${i}].sessionKey must be a 0x-prefixed 32-byte hex string.`);
+        }
         agentBotSpecs!.push({
           privateKey: key,
+          sessionKey: typeof sessionKey === "string" && sessionKey ? sessionKey : undefined,
           name: typeof name === "string" && name.trim() ? name.trim() : `Agent ${i + 1}`,
           model: typeof model === "string" && model ? model : raw.AGENT_BOT_MODEL || raw.GROQ_MODEL || undefined,
           pollSeconds: specPoll,
@@ -218,6 +228,7 @@ function validate(): OracleEnv {
     GROQ_API_KEY: raw.GROQ_API_KEY!,
     GROQ_MODEL: raw.GROQ_MODEL || undefined,
     RPC_URL: raw.RPC_URL!,
+    WSS_RPC_URL: raw.WSS_RPC_URL || undefined,
     CHAIN_ID: chainId,
     CONTRACT_ADDRESS: raw.CONTRACT_ADDRESS!,
     POLL_INTERVAL_SECONDS: pollIntervalSeconds,
@@ -234,6 +245,7 @@ function validate(): OracleEnv {
     AGENT_BOT_POLL_SECONDS: agentBotPollSeconds,
     AGENT_BOT_ACCEPT_ALL: raw.AGENT_BOT_ACCEPT_ALL === "true",
     AGENT_BOT_MODEL: raw.AGENT_BOT_MODEL || raw.GROQ_MODEL || undefined,
+    AGENT_BOT_SESSION_KEY: raw.AGENT_BOT_SESSION_KEY || undefined,
     AGENT_BOT_SPECS: agentBotSpecs,
   };
 }
@@ -251,6 +263,7 @@ export function agentBotSpecs(): AgentBotSpec[] {
     return [
       {
         privateKey: env.AGENT_BOT_PRIVATE_KEY,
+        sessionKey: env.AGENT_BOT_SESSION_KEY,
         name: env.AGENT_BOT_NAME || "DevBot",
         model: env.AGENT_BOT_MODEL,
         pollSeconds: env.AGENT_BOT_POLL_SECONDS,

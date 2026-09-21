@@ -3,15 +3,18 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { isAddress } from "viem";
+import { useAccount } from "wagmi";
 import StatusBadge from "@/components/StatusBadge";
 import { ArrowLeft, ArrowUpRight, Award, Copy, History, Person, Star, Scale } from "@/components/icons";
 import {
-  fetchAgentRating,
+  fetchAgentReputation,
+  fetchAgentName,
   fetchAgentRatingRows,
-  fetchAgentCompletedCount,
   fetchTaskHistory,
   fetchDisputedTaskIds,
   isDisputeRange,
+  myIdentity,
+  writeGasless,
 } from "@/lib/tasks";
 import {
   shortAddress,
@@ -23,6 +26,7 @@ import {
 } from "@/lib/format";
 import type { AgentRatingRow, SpecSummary, TaskView } from "@/lib/types";
 import { agentNameOf } from "@/lib/agents";
+import { bundlerUrl } from "@/lib/aa";
 
 function stars(avg: number) {
   return [1, 2, 3, 4, 5].map((n) => (
@@ -35,10 +39,16 @@ function stars(avg: number) {
 }
 
 export default function AgentProfilePage({ params }: { params: Promise<{ address: string }> }) {
+  const { address: connectedEoa } = useAccount();
   const [address, setAddress] = useState<string | null>(null);
   const [invalid, setInvalid] = useState(false);
   const [summary, setSummary] = useState<{ totalScore: bigint; count: bigint } | null>(null);
   const [completed, setCompleted] = useState(0);
+  const [agentName, setAgentName] = useState<string | null>(null);
+  const [smart, setSmart] = useState<string | null>(null);
+  const [nameInput, setNameInput] = useState("");
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [ratings, setRatings] = useState<AgentRatingRow[]>([]);
   const [history, setHistory] = useState<TaskView[]>([]);
   const [specs, setSpecs] = useState<Record<string, SpecSummary>>({});
@@ -59,9 +69,9 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
     setLoading(true);
     setError(null);
     try {
-      const [s, c, r, t, specMap] = await Promise.all([
-        fetchAgentRating(address),
-        fetchAgentCompletedCount(address),
+      const [rep, name, r, t, specMap] = await Promise.all([
+        fetchAgentReputation(address),
+        fetchAgentName(address),
         fetchAgentRatingRows(address),
         fetchTaskHistory(address),
         fetch(`/api/specs`)
@@ -69,8 +79,9 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
           .then((j) => j?.specs ?? {})
           .catch(() => ({}) as Record<string, SpecSummary>),
       ]);
-      setSummary(s);
-      setCompleted(c);
+      setSummary({ totalScore: rep.totalScore, count: rep.ratingCount });
+      setCompleted(Number(rep.completedTasks));
+      setAgentName(name);
       setRatings(r);
 
       // The agent's own work (they were the counterparty doing the task);
@@ -96,8 +107,24 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
     load();
   }, [load]);
 
+  useEffect(() => {
+    let alive = true;
+    if (!connectedEoa) {
+      setSmart(null);
+      return;
+    }
+    myIdentity()
+      .then(({ smart: s }) => alive && setSmart(s))
+      .catch(() => alive && setSmart(null));
+    return () => {
+      alive = false;
+    };
+  }, [connectedEoa]);
+
   const avg = summary && summary.count > 0n ? Number(summary.totalScore) / Number(summary.count) : null;
   const disputedCount = disputedIds.size;
+  const bundlerOnline = Boolean(bundlerUrl());
+  const isSelf = smart !== null && address !== null && smart.toLowerCase() === address;
 
   const statItems = [
     { label: "Avg rating", value: avg === null ? "—" : avg.toFixed(1), sub: avg === null ? "not rated yet" : `${summary?.count ?? 0n} rating${summary?.count === 1n ? "" : "s"}` },
@@ -125,7 +152,7 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
           </span>
           <div className="min-w-0">
             <h1 className="text-2xl font-semibold tracking-tight text-fg">
-              {agentNameOf(address ?? "") ?? "Agent profile"}
+              {agentName ?? agentNameOf(address ?? "") ?? "Agent profile"}
             </h1>
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
               <span className="font-mono text-sm text-mute">{shortAddress(address ?? "")}</span>
@@ -182,6 +209,47 @@ export default function AgentProfilePage({ params }: { params: Promise<{ address
               </div>
             ))}
           </section>
+
+          {isSelf && bundlerOnline && (
+            <section className="panel p-5">
+              <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-fg">
+                <Person size={15} className="text-accent" /> Your agent name
+              </h2>
+              <p className="mb-3 text-[13px] leading-relaxed text-faint">
+                Set a human-readable name any app can resolve on-chain (max 32 characters).
+                Leave it empty to clear.
+              </p>
+              <form
+                className="flex flex-wrap items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const name = nameInput.trim().slice(0, 32);
+                  setNameBusy(true);
+                  setNameError(null);
+                  writeGasless("setAgentName", [name])
+                    .then(() => {
+                      setAgentName(name.length > 0 ? name : null);
+                      setNameInput(name);
+                      load();
+                    })
+                    .catch((err) => setNameError(err instanceof Error ? err.message : String(err)))
+                    .finally(() => setNameBusy(false));
+                }}
+              >
+                <input
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder={agentName ?? "e.g. DevBot"}
+                  maxLength={32}
+                  className="input min-w-0 flex-1"
+                />
+                <button type="submit" disabled={nameBusy} className="btn-secondary btn-sm">
+                  {nameBusy ? "Saving…" : "Save name"}
+                </button>
+              </form>
+              {nameError && <p className="mt-2 text-[12px] text-warn break-words">{nameError}</p>}
+            </section>
+          )}
 
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Rating history */}

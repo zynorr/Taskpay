@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import StatusBadge from "./StatusBadge";
 import { ArrowRight, Clock } from "./icons";
 import {
@@ -31,13 +32,16 @@ export default function TaskCard({
   spec,
   isMine,
   myAddrs,
+  justChanged,
 }: {
   task: TaskView;
   dispute?: DisputeView | null;
   spec?: SpecSummary;
   isMine?: boolean;
   myAddrs?: string[];
+  justChanged?: boolean;
 }) {
+  const router = useRouter();
   const isOpen = task.agent === ZERO_ADDRESS;
   const role =
     myAddrs && myAddrs.includes(task.requester.toLowerCase())
@@ -118,7 +122,7 @@ export default function TaskCard({
             <span className="font-mono text-xs font-semibold text-faint tnum">
               #{task.taskId.toString().padStart(3, "0")}
             </span>
-            <StatusBadge status={task.status} pulse={disputePhase} />
+            <StatusBadge status={task.status} pulse={disputePhase || justChanged} />
             {isOpen && task.status === Status.Created && (task.minRating ?? 0) > 0 && (
               <span
                 className="rounded-full border border-accent-line bg-accent-soft px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent tnum"
@@ -167,16 +171,25 @@ export default function TaskCard({
 
       {/* Bottom row: parties + state */}
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-lineSoft pt-3 text-xs">
-        <a
-          href={explorerAddress(task.requester)}
-          target="_blank"
-          rel="noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          className="font-mono text-mute transition hover:text-accent"
+        <span
+          role="link"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(explorerAddress(task.requester), "_blank", "noopener,noreferrer");
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(explorerAddress(task.requester), "_blank", "noopener,noreferrer");
+            }
+          }}
+          className="cursor-pointer font-mono text-mute transition hover:text-accent"
           title="Requester"
         >
           {shortAddress(task.requester)}
-        </a>
+        </span>
         <ArrowRight size={12} className="text-faint" />
         {isOpen ? (
           <span
@@ -186,14 +199,25 @@ export default function TaskCard({
             Open
           </span>
         ) : (
-          <Link
-            href={`/agent/${task.agent}`}
-            onClick={(e) => e.stopPropagation()}
-            className="font-mono text-mute transition hover:text-accent"
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/agent/${task.agent}`);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopPropagation();
+                router.push(`/agent/${task.agent}`);
+              }
+            }}
+            className="cursor-pointer font-mono text-mute transition hover:text-accent"
             title="Agent profile"
           >
             {agentLabel(task.agent)}
-          </Link>
+          </span>
         )}
         {stateLine && (
           <>

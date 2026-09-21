@@ -35,13 +35,13 @@ services:
       - key: CHAIN_ID
         value: "677"
       - key: CONTRACT_ADDRESS
-        value: "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7"
+        value: "0x1955D52833863B8e74c095457b5bE47332BAd6dF"
       - key: ENTRY_POINT
         value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - key: AA_FACTORY
-        value: "0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b"
+        value: "0xd6fF7d0Db03213800f7Fe8ef961642e7CEcDDa5B"
       - key: PAYMASTER
-        value: "0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0"
+        value: "0x29BE94cC6308BB497fDA8Be5A51E4bDd95662c9C"
       - key: ORACLE_INTERNAL_URL
         value: http://127.0.0.1:8787
       # --- oracle cadence / sponsor protection ---
@@ -79,10 +79,10 @@ services:
       - key: NEXT_PUBLIC_CHAIN_ID
         value: "677"
       - key: NEXT_PUBLIC_TASKPAY_CONTRACT
-        value: "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7"
+        value: "0x1955D52833863B8e74c095457b5bE47332BAd6dF"
       - key: NEXT_PUBLIC_ENTRY_POINT
         value: "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
       - key: NEXT_PUBLIC_AA_FACTORY
-        value: "0xFbfBBD060b1d4E7Edae6D9e58C73F731927b2f2b"
+        value: "0xd6fF7d0Db03213800f7Fe8ef961642e7CEcDDa5B"
       - key: NEXT_PUBLIC_PAYMASTER
-        value: "0x8Ed5e3054A98a6528B666Ca99411648B94A0fDF0"
+        value: "0x29BE94cC6308BB497fDA8Be5A51E4bDd95662c9C"

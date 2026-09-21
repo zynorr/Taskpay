@@ -54,7 +54,10 @@ export default function HomePage() {
   const [refreshing, setRefreshing] = useState(false);
   const [visibleLimit, setVisibleLimit] = useState(PAGE_STEP);
   const [totalCount, setTotalCount] = useState(0);
+  const [changedIds, setChangedIds] = useState<Set<string>>(new Set());
   const aliveRef = useRef(true);
+  // Last seen status per task, to pulse a card's badge when it changes live.
+  const prevStatusRef = useRef<Record<string, number>>({});
 
   const load = useCallback(async (limit: number) => {
     try {
@@ -62,6 +65,19 @@ export default function HomePage() {
       if (!aliveRef.current) return;
       setTasks(t);
       setTotalCount(count);
+
+      // Detect live status changes so a card's badge can pulse once.
+      const changed = new Set<string>();
+      for (const task of t) {
+        const id = task.taskId.toString();
+        const prev = prevStatusRef.current[id];
+        if (prev !== undefined && prev !== task.status) changed.add(id);
+        prevStatusRef.current[id] = task.status;
+      }
+      if (changed.size > 0) {
+        setChangedIds(changed);
+        window.setTimeout(() => setChangedIds(new Set()), 2600);
+      }
 
       const [d, s] = await Promise.all([
         (async () => {
@@ -175,9 +191,9 @@ export default function HomePage() {
   const openTasks = tasks.filter((t) => isOpenTask(t));
   const floorCount = (n: number) => openTasks.filter((t) => (t.minRating ?? 0) >= n).length;
 
-  const statItems = [
+  const statItems: { label: string; value: string; unit?: string; sub?: string }[] = [
     { label: "Tasks posted", value: String(stats.total) },
-    { label: "In escrow", value: `${formatAmount(stats.inEscrow)} BOT`, sub: `${stats.active} active` },
+    { label: "In escrow", value: formatAmount(stats.inEscrow), unit: "BOT", sub: `${stats.active} active` },
     { label: "In dispute", value: String(stats.disputed) },
     { label: "Settled", value: String(stats.settled) },
   ];
@@ -185,28 +201,37 @@ export default function HomePage() {
   return (
     <div className="animate-fade-up space-y-10">
       {/* Hero */}
-      <section className="hero-grid relative overflow-hidden rounded-2xl border border-line bg-subtle px-6 py-12 sm:px-10">
+      <section className="hero-grid relative overflow-hidden rounded-2xl border border-line bg-subtle px-5 py-10 sm:px-10 sm:py-12">
         <div className="relative max-w-2xl">
-          <p className="flex items-center gap-2 text-xs font-medium text-mute">
-            <span className="flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+          <p className="chip w-fit">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 live-dot" />
             Live on BOT Chain · chain 677
           </p>
-          <h1 className="mt-4 text-4xl font-semibold leading-[1.08] tracking-tightest text-fg sm:text-[2.75rem]">
-            Agent work, held in escrow{" "}
-            <span className="text-mute">until it&apos;s delivered right.</span>
+          <h1 className="mt-4 text-3xl font-semibold leading-[1.1] tracking-tightest text-fg sm:text-[2.75rem] sm:leading-[1.08]">
+            The settlement layer for agent work{" "}
+            <span className="text-mute">on BOT Chain.</span>
           </h1>
           <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-mute">
-            Post a task with BOT locked on-chain. The agent ships the deliverable and gets paid —
-            or an AI quorum settles the dispute, with a Senior Arbiter on appeal. Every action is
-            sponsored, so gas never gets in the way.
+            Escrow the reward first, then settle three ways: requester release, a worker-friendly
+            expiry, or an AI quorum with a Senior Arbiter on appeal. Every action is sponsored and
+            every settled task leaves a portable on-chain reputation.
           </p>
-          <div className="mt-7 flex flex-wrap items-center gap-3">
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] font-medium text-fg">
+            <span>Escrow-first</span>
+            <span className="text-faint">·</span>
+            <span>AI-judged disputes</span>
+            <span className="text-faint">·</span>
+            <span>0 gas</span>
+            <span className="text-faint">·</span>
+            <span>Portable reputation</span>
+          </div>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
             <Link href="/create" className="btn-primary !px-5 !py-2.5">
               Post a task
               <ArrowRight size={15} />
             </Link>
-            <a href="#marketplace" className="btn-secondary !px-5 !py-2.5">
-              Browse tasks
+            <a href="#marketplace" className="btn-secondary !px-5 !py-2.5 border-accent-line hover:border-accent-line">
+              Find work
             </a>
           </div>
         </div>
@@ -217,7 +242,10 @@ export default function HomePage() {
         {statItems.map((s) => (
           <div key={s.label} className="bg-canvas px-5 py-4">
             <div className="micro">{s.label}</div>
-            <div className="mt-1 text-xl font-semibold tracking-tight text-fg tnum">{s.value}</div>
+            <div className="mt-1 text-xl font-semibold tracking-tight text-fg tnum">
+              {s.value}
+              {s.unit && <span className="ml-1 text-sm font-medium text-mute">{s.unit}</span>}
+            </div>
             {s.sub && <div className="mt-0.5 text-[11px] text-faint">{s.sub}</div>}
           </div>
         ))}
@@ -229,7 +257,7 @@ export default function HomePage() {
           <div className="flex items-center gap-3">
             <h2 className="text-lg font-semibold tracking-tight text-fg">Marketplace</h2>
             <span className="chip">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-soft" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 live-dot" />
               live · updates automatically
             </span>
           </div>
@@ -335,18 +363,24 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="space-y-2.5">
-            {filtered.map((t) => (
-              <TaskCard
+            {filtered.map((t, i) => (
+              <div
                 key={t.taskId.toString()}
-                task={t}
-                dispute={disputes[t.taskId.toString()] ?? null}
-                spec={specs[t.taskId.toString()]}
-                isMine={
-                  myAddrs.includes(t.requester.toLowerCase()) ||
-                  myAddrs.includes(t.agent.toLowerCase())
-                }
-                myAddrs={myAddrs}
-              />
+                className="animate-fade-up"
+                style={{ animationDelay: `${Math.min(i * 30, 240)}ms` }}
+              >
+                <TaskCard
+                  task={t}
+                  dispute={disputes[t.taskId.toString()] ?? null}
+                  spec={specs[t.taskId.toString()]}
+                  isMine={
+                    myAddrs.includes(t.requester.toLowerCase()) ||
+                    myAddrs.includes(t.agent.toLowerCase())
+                  }
+                  myAddrs={myAddrs}
+                  justChanged={changedIds.has(t.taskId.toString())}
+                />
+              </div>
             ))}
           </div>
         )}

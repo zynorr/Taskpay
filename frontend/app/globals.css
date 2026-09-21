@@ -15,8 +15,8 @@
   --line-h: rgba(255, 255, 255, 0.2);
   --line-soft: rgba(255, 255, 255, 0.06);
   --fg: #fafafa;
-  --mute: #a6a6ae;
-  --faint: #8b8b94;
+  --mute: #b3b3bc;
+  --faint: #9999a3;
   --grid-line: rgba(255, 255, 255, 0.035);
   --shadow-panel:
     0 1px 0 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px -20px rgba(0, 0, 0, 0.9);
@@ -125,6 +125,11 @@ html.light {
   .tnum {
     font-variant-numeric: tabular-nums;
   }
+
+  /* Headings default to tight tracking; explicit tracking-* utilities win. */
+  h1, h2, h3 {
+    letter-spacing: -0.02em;
+  }
 }
 
 @layer components {
@@ -139,7 +144,7 @@ html.light {
   }
 
   .card-link {
-    @apply panel block transition hover:border-lineH;
+    @apply panel block transition hover:-translate-y-px hover:border-lineH;
   }
 
   /* --- Buttons --------------------------------------------------------- */
@@ -148,7 +153,9 @@ html.light {
   }
 
   .btn-primary {
-    @apply btn bg-iris-600 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset] hover:bg-iris-500;
+    @apply btn bg-iris-600 text-white shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset] hover:bg-iris-500 hover:shadow-[0_0_0_1px_rgba(255,255,255,0.06)_inset,0_6px_24px_-8px_rgba(122,104,255,0.55)];
+    /* Subtle top-light / bottom-shade gradient so the flat fill has depth. */
+    background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(0, 0, 0, 0.07));
   }
 
   .btn-secondary {
@@ -245,13 +252,35 @@ html.light {
   background: rgba(128, 128, 140, 0.5);
 }
 
-/* Fine grid backdrop for the hero */
+/* Fine grid backdrop for the hero. The grid lives on a ::before layer so its
+   mask fades only the grid — a mask on the section itself also fades the hero's
+   text and CTA buttons, making them look washed out. A soft iris glow sits on
+   the section's own background, behind the grid and content. */
 .hero-grid {
+  background-image: radial-gradient(38rem 20rem at 50% -6%, rgba(122, 104, 255, 0.13), transparent 65%);
+}
+
+.hero-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
   background-image:
     linear-gradient(var(--grid-line) 1px, transparent 1px),
     linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 36px 36px;
   mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, black 30%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 90% at 50% 0%, black 30%, transparent 100%);
+}
+
+/* Live indicator: soft opacity pulse + expanding ring. */
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4); }
+  50% { box-shadow: 0 0 0 4px rgba(52, 211, 153, 0); }
+}
+.live-dot {
+  animation: pulse-soft 2.2s ease-in-out infinite, pulse-ring 2.2s ease-in-out infinite;
 }
 
 /* Smooth theme transition on interactive elements only */
@@ -263,5 +292,7 @@ body,
   transition:
     background-color 0.2s ease,
     border-color 0.2s ease,
-    color 0.2s ease;
+    color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
 }

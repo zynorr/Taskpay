@@ -2,7 +2,7 @@
 // Redeployed from the current tested source — see DEPLOY.md.
 export const CONTRACT_ADDRESS =
   (process.env.NEXT_PUBLIC_TASKPAY_CONTRACT as `0x${string}` | undefined) ??
-  "0xD65eB74D1d3Ec23EFa3396593953e4d8150921B7";
+  "0x1955D52833863B8e74c095457b5bE47332BAd6dF";
 
 export const TASKPAY_ABI = [
   // --- Views ---
@@ -94,6 +94,30 @@ export const TASKPAY_ABI = [
       { name: "totalScore", type: "uint256" },
       { name: "count", type: "uint256" },
     ],
+  },
+  {
+    type: "function",
+    name: "getAgentReputation",
+    stateMutability: "view",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "totalScore", type: "uint256" },
+          { name: "ratingCount", type: "uint256" },
+          { name: "completedTasks", type: "uint256" },
+        ],
+      },
+    ],
+  },
+  {
+    type: "function",
+    name: "agentNames",
+    stateMutability: "view",
+    inputs: [{ name: "agent", type: "address" }],
+    outputs: [{ name: "", type: "string" }],
   },
   {
     type: "function",
@@ -211,6 +235,13 @@ export const TASKPAY_ABI = [
       { name: "taskId", type: "uint256" },
       { name: "score", type: "uint8" },
     ],
+    outputs: [],
+  },
+  {
+    type: "function",
+    name: "setAgentName",
+    stateMutability: "nonpayable",
+    inputs: [{ name: "name", type: "string" }],
     outputs: [],
   },
   {

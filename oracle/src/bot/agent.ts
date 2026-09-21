@@ -77,6 +77,15 @@ const DEFAULT_PROFILE_KEYWORDS = [
 
 const MAX_DELIVERABLE_CHARS = 2_000;
 
+// Session-key scope + lifetime for the bot's delegated signer: the bot may only
+// accept/submit on the TaskPay contract, and the key expires after a week (the
+// bot re-authorizes a fresh key on each restart that finds none active).
+const SESSION_TTL_SECONDS = 7 * 24 * 3600;
+const ACCOUNT_SESSION_ABI = [
+  "function sessionValidUntil(address key) view returns (uint48)",
+  "function authorizeSession(address key, uint48 validUntil, address[] targets, bytes4[] selectors)",
+];
+
 // A hung RPC (the public testnet endpoint can stall for minutes) must not
 // wedge the daemon: if a tick doesn't finish in this long, `busy` is reset
 // and the next tick runs. Long enough for slow Groq calls + a sponsored op.
@@ -99,6 +108,11 @@ export class AgentBot {
   private readonly pollMs: number;
   private readonly acceptAll: boolean;
   private readonly profile: readonly string[];
+  private readonly sessionKey: Wallet | null;
+  // The signer for ops: the scoped session key once authorized, else the master
+  // owner. The master key never signs routine work once a session is live.
+  private signer: Wallet;
+  private readonly accountIface = new Interface(ACCOUNT_SESSION_ABI);
 
   // The account that IS the bot on TaskPay (factory-derived SimpleAccount).
   private account: string | null = null;
@@ -118,6 +132,8 @@ export class AgentBot {
 
   constructor(spec: AgentBotSpec) {
     this.owner = new Wallet(spec.privateKey);
+    this.sessionKey = spec.sessionKey ? new Wallet(spec.sessionKey) : null;
+    this.signer = this.sessionKey ?? this.owner;
     this.name = spec.name;
     this.model = spec.model || "openai/gpt-oss-120b";
     this.pollMs = (spec.pollSeconds ?? 12) * 1000;
@@ -155,6 +171,7 @@ export class AgentBot {
       // Designate this address as the agent on /create to have the bot do the work.
       hint: "create tasks with agent = " + this.account,
     });
+    await this.authorizeSessionIfNeeded();
     void this.tick();
     this.timer = setInterval(() => void this.tick(), this.pollMs);
   }
@@ -435,8 +452,8 @@ export class AgentBot {
   /**
    * Run one TaskPay method as the bot's SimpleAccount, sponsored by the
    * paymaster: buildQuote (fills nonce/gas/paymaster, computes userOpHash) →
-   * sign with the bot EOA → sendUserOp (simulates, then broadcasts handleOps
-   * under the shared oracle-wallet tx lock).
+   * sign (session key when live, else master EOA) → sendUserOp (simulates, then
+   * broadcasts handleOps under the shared oracle-wallet tx lock).
    */
   private async op(functionName: string, args: unknown[]): Promise<AgentOpResult> {
     const callData = this.iface.encodeFunctionData(functionName, args);
@@ -445,7 +462,67 @@ export class AgentBot {
       target: env.CONTRACT_ADDRESS,
       callData,
     });
-    quote.userOp.signature = await this.owner.signMessage(getBytes(quote.userOpHash));
+    quote.userOp.signature = await this.signer.signMessage(getBytes(quote.userOpHash));
     return sendUserOp(quote.userOp);
+  }
+
+  /**
+   * One-time setup so the runtime can stop holding the master key. When a
+   * session key is configured, check whether it is already authorized; if not,
+   * the master key authorizes it (scoped to acceptTask + submitWork on TaskPay,
+   * value-free, expiring after SESSION_TTL_SECONDS) via a self-call. Falls back
+   * to master-key signing when the account predates session-key support or the
+   * authorization op can't complete (undeployed account, bundler down, ...).
+   */
+  private async authorizeSessionIfNeeded(): Promise<void> {
+    if (!this.sessionKey || !this.account) return;
+    try {
+      let validUntil: bigint;
+      try {
+        const raw = await provider.call({
+          to: this.account,
+          data: this.accountIface.encodeFunctionData("sessionValidUntil", [this.sessionKey.address]),
+        });
+        validUntil = this.accountIface.decodeFunctionResult("sessionValidUntil", raw)[0] as bigint;
+      } catch {
+        this.signer = this.owner;
+        logger.info("agent_bot_session_unsupported", { name: this.name, account: this.account });
+        return;
+      }
+      if (validUntil > 0n) {
+        logger.info("agent_bot_session_active", { name: this.name, validUntil: validUntil.toString() });
+        return;
+      }
+
+      const validUntilSec = Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS;
+      const acceptSel = this.iface.getFunction("acceptTask")!.selector;
+      const submitSel = this.iface.getFunction("submitWork")!.selector;
+      const callData = this.accountIface.encodeFunctionData("authorizeSession", [
+        this.sessionKey.address,
+        validUntilSec,
+        [env.CONTRACT_ADDRESS],
+        [acceptSel, submitSel],
+      ]);
+      const quote = await buildQuote({
+        owner: this.owner.address,
+        target: this.account,
+        callData,
+      });
+      quote.userOp.signature = await this.owner.signMessage(getBytes(quote.userOpHash));
+      await sendUserOp(quote.userOp);
+
+      this.signer = this.sessionKey;
+      logger.info("agent_bot_session_authorized", {
+        name: this.name,
+        key: this.sessionKey.address,
+        validUntil: validUntilSec,
+      });
+    } catch (err) {
+      this.signer = this.owner;
+      logger.warn("agent_bot_session_authorize_failed", {
+        name: this.name,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 }

@@ -21,7 +21,8 @@ type WriteName =
   | "finalizeAfterChallenge"
   | "cancelOpenTask"
   | "reclaimAfterDeadline"
-  | "setCancellationApproval";
+  | "setCancellationApproval"
+  | "setAgentName";
 
 /**
  * The task id a createTask tx actually minted, decoded from its TaskCreated
@@ -225,6 +226,39 @@ export async function fetchAgentCompletedCount(agent: string): Promise<number> {
     return Number(raw);
   } catch {
     return 0;
+  }
+}
+
+/** The single portable on-chain reputation record: ratings + settled tasks. */
+export async function fetchAgentReputation(
+  agent: string,
+): Promise<{ totalScore: bigint; ratingCount: bigint; completedTasks: bigint }> {
+  const client = getPublicClient(config);
+  try {
+    return (await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "getAgentReputation",
+      args: [agent as `0x${string}`],
+    })) as { totalScore: bigint; ratingCount: bigint; completedTasks: bigint };
+  } catch {
+    return { totalScore: 0n, ratingCount: 0n, completedTasks: 0n };
+  }
+}
+
+/** Agent-owned on-chain name (null when unset). */
+export async function fetchAgentName(agent: string): Promise<string | null> {
+  const client = getPublicClient(config);
+  try {
+    const raw = (await client.readContract({
+      address: CONTRACT_ADDRESS,
+      abi,
+      functionName: "agentNames",
+      args: [agent as `0x${string}`],
+    })) as string;
+    return raw.length > 0 ? raw : null;
+  } catch {
+    return null;
   }
 }
 

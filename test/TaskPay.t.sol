@@ -992,6 +992,52 @@ contract TaskPayTest is Test {
         assertEq(taskpay.getAgentTaskCount(agent), 1);
     }
 
+    function test_getAgentReputation_aggregatesRatingAndCompleted() public {
+        // Released + rated 4.
+        uint256 ratedId = _createAcceptAndSubmit();
+        vm.prank(requester);
+        taskpay.release(ratedId);
+        vm.prank(requester);
+        taskpay.rateAgent(ratedId, 4);
+
+        // Released but not yet rated: ratingCount vs completedTasks differ.
+        uint256 unratedId = _createAcceptAndSubmit();
+        vm.prank(requester);
+        taskpay.release(unratedId);
+
+        TaskPay.Reputation memory rep = taskpay.getAgentReputation(agent);
+        assertEq(rep.totalScore, 4, "totalScore");
+        assertEq(rep.ratingCount, 1, "ratingCount");
+        assertEq(rep.completedTasks, 2, "completedTasks");
+    }
+
+    function test_getAgentReputation_unratedAgentIsZeroed() public {
+        TaskPay.Reputation memory rep = taskpay.getAgentReputation(agent);
+        assertEq(rep.totalScore, 0);
+        assertEq(rep.ratingCount, 0);
+        assertEq(rep.completedTasks, 0);
+    }
+
+    function test_setAgentName_setsOwnName() public {
+        vm.prank(agent);
+        taskpay.setAgentName("DevBot");
+        assertEq(taskpay.agentNames(agent), "DevBot");
+    }
+
+    function test_setAgentName_clearsWithEmptyString() public {
+        vm.prank(agent);
+        taskpay.setAgentName("DevBot");
+        vm.prank(agent);
+        taskpay.setAgentName("");
+        assertEq(taskpay.agentNames(agent), "");
+    }
+
+    function test_setAgentName_revertsWhenTooLong() public {
+        vm.prank(agent);
+        vm.expectRevert("TaskPay: name too long");
+        taskpay.setAgentName("this name is much longer than thirty two bytes for sure");
+    }
+
     // ------------------------------------------------------------------ //
     // Views
     // ------------------------------------------------------------------ //
