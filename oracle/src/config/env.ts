@@ -28,6 +28,12 @@ export interface OracleEnv {
   POLL_INTERVAL_SECONDS: number;
   START_BLOCK?: number;
   GITHUB_TOKEN?: string;
+  // Where the autonomous bots publish deliverable evidence: "owner/repo" (or a
+  // GitHub URL). When set (and GITHUB_TOKEN is present) bots commit their
+  // deliverables there and submit a pinned repo URL instead of inlining text
+  // on-chain — full artifacts, fetchable by the dispute agents.
+  GITHUB_EVIDENCE_REPO?: string;
+  GITHUB_EVIDENCE_BRANCH_PREFIX?: string;
   MAX_REPO_BYTES?: number;
   DATA_DIR: string;
   // ERC-4337 sponsor stack (the oracle doubles as the bundler + paymaster signer).
@@ -234,6 +240,8 @@ function validate(): OracleEnv {
     POLL_INTERVAL_SECONDS: pollIntervalSeconds,
     START_BLOCK: startBlock,
     GITHUB_TOKEN: raw.GITHUB_TOKEN || undefined,
+    GITHUB_EVIDENCE_REPO: raw.GITHUB_EVIDENCE_REPO || undefined,
+    GITHUB_EVIDENCE_BRANCH_PREFIX: raw.GITHUB_EVIDENCE_BRANCH_PREFIX || undefined,
     MAX_REPO_BYTES: raw.ORACLE_MAX_REPO_BYTES ? Number(raw.ORACLE_MAX_REPO_BYTES) : undefined,
     DATA_DIR: raw.TASKPAY_DATA_DIR || path.resolve(__dirname, "../../../data"),
     ENTRY_POINT: raw.ENTRY_POINT || undefined,

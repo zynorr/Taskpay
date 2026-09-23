@@ -134,6 +134,18 @@ export function looksLikeUrl(s: string): boolean {
   return /^https?:\/\/\S+$/.test(s.trim());
 }
 
+/** Characters of a deliverable stored on-chain; longer submissions are truncated. */
+export const SUBMISSION_CHAR_LIMIT = 2_000;
+
+/**
+ * True when a submission carries a GitHub URL pinned to a commit — the evidence
+ * format the dispute agents fetch in full (`https://github.com/o/r@<sha>` or
+ * the same with a space). Mirrors the oracle's repo-pin parser.
+ */
+export function isPinnedRepoEvidence(s: string): boolean {
+  return /https?:\/\/\S*github\.com\/\S+?(\s+|@)[0-9a-fA-F]{40}/.test(s.trim());
+}
+
 /** async copy to clipboard with fallback. */
 export async function copyText(text: string): Promise<boolean> {
   try {

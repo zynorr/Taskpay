@@ -516,6 +516,12 @@ export default function CreateTaskPage() {
                   <span className="text-mute">{shortHash(specHashOf(specText.trim()))}</span>
                 </p>
               )}
+              <p className="mt-1.5 text-[11px] leading-relaxed text-faint">
+                For code or artifacts, ask for delivery as a pinned repo link —{" "}
+                <span className="font-mono">https://github.com/owner/repo@&lt;commit&gt;</span> — so
+                the full work is fetched and judged. Free-form text is capped at 2,000 characters
+                on-chain.
+              </p>
             </div>
           </section>
 

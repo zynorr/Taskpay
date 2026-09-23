@@ -6,6 +6,14 @@ import { env, type AgentBotSpec } from "../config/env.js";
 import { provider, Status, type TaskStruct } from "../contract/client.js";
 import { buildQuote, sendUserOp } from "../bundler/userop.js";
 import { logger } from "../lib/logger.js";
+import {
+  isEvidenceUploadEnabled,
+  resolveEvidenceUploadConfig,
+  toUploadFailureSummary,
+  uploadDeliverableEvidence,
+  type DeliverableFile,
+  type GitHubEvidenceRepo,
+} from "../github/push.js";
 import { withTimeout } from "../lib/concurrency.js";
 import abi from "../contract/TaskPay.abi.json" with { type: "json" };
 
@@ -77,6 +85,31 @@ const DEFAULT_PROFILE_KEYWORDS = [
 
 const MAX_DELIVERABLE_CHARS = 2_000;
 
+// Parse the model's structured deliverable ({"files":[{path,content}]}).
+// Tolerates a ```json fence around the object; rejects anything else so the
+// caller can fall back to the inline-text path.
+function parseDeliverableFiles(raw: string): DeliverableFile[] {
+  let text = raw.trim();
+  const fence = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
+  if (fence?.[1]) text = fence[1].trim();
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start === -1 || end <= start) throw new Error("Deliverable was not a JSON files object");
+  const parsed = JSON.parse(text.slice(start, end + 1)) as { files?: unknown };
+  if (!Array.isArray(parsed.files) || parsed.files.length === 0) {
+    throw new Error("Deliverable JSON had no files array");
+  }
+  const files: DeliverableFile[] = [];
+  for (const entry of parsed.files) {
+    const file = entry as { path?: unknown; content?: unknown };
+    if (typeof file.path !== "string" || !file.path.trim() || typeof file.content !== "string") {
+      throw new Error("Deliverable JSON file entry needs string path + content");
+    }
+    files.push({ path: file.path.trim(), content: file.content });
+  }
+  return files;
+}
+
 // Session-key scope + lifetime for the bot's delegated signer: the bot may only
 // accept/submit on the TaskPay contract, and the key expires after a week (the
 // bot re-authorizes a fresh key on each restart that finds none active).
@@ -109,6 +142,8 @@ export class AgentBot {
   private readonly acceptAll: boolean;
   private readonly profile: readonly string[];
   private readonly sessionKey: Wallet | null;
+  // Where this bot publishes deliverable evidence (null = inline-text mode).
+  private readonly evidenceRepo: GitHubEvidenceRepo | null = resolveEvidenceUploadConfig(env.GITHUB_EVIDENCE_REPO);
   // The signer for ops: the scoped session key once authorized, else the master
   // owner. The master key never signs routine work once a session is live.
   private signer: Wallet;
@@ -344,15 +379,57 @@ export class AgentBot {
     const spec = await this.readSpec(id);
     if (spec === null) return; // spec not archived yet — retry next tick
 
-    const deliverable = await this.generateDeliverable(spec.text);
+    // Deliveport: prefer publishing full artifacts to the evidence repo and
+    // submitting a pinned `repo@sha` pointer (the dispute agents fetch it in
+    // full); fall back to inline text when the repo isn't configured or the
+    // upload fails.
+    const evidenceRepo = this.evidenceRepo;
+    let submission: string;
+    let mode: "repo" | "text" = "text";
+    let fileCount = 0;
+    if (isEvidenceUploadEnabled(evidenceRepo)) {
+      try {
+        const files = await this.generateDeliverableFiles(spec.text);
+        const summary = await uploadDeliverableEvidence({
+          repo: evidenceRepo,
+          taskId: id,
+          botName: this.name,
+          files,
+          branchPrefix: env.GITHUB_EVIDENCE_BRANCH_PREFIX,
+        });
+        submission = summary.submission;
+        mode = "repo";
+        fileCount = summary.fileCount;
+        logger.info("agent_bot_evidence_uploaded", {
+          name: this.name,
+          taskId: key,
+          repo: summary.repoUrl,
+          commit: summary.commitSha,
+          files: summary.fileCount,
+          bytes: summary.totalBytes,
+        });
+      } catch (err) {
+        logger.warn("agent_bot_evidence_upload_failed", {
+          name: this.name,
+          taskId: key,
+          error: toUploadFailureSummary(err),
+        });
+        submission = await this.generateDeliverable(spec.text);
+      }
+    } else {
+      submission = await this.generateDeliverable(spec.text);
+    }
+
     try {
-      const res = await this.op("submitWork", [id, deliverable]);
+      const res = await this.op("submitWork", [id, submission]);
       this.submitted.add(key);
       logger.info("agent_bot_submitted", {
         name: this.name,
         taskId: key,
         txHash: res.txHash,
-        chars: deliverable.length,
+        mode,
+        files: fileCount,
+        chars: submission.length,
       });
     } catch (err) {
       // Benign restart/race: the task already left Accepted (e.g. a previous
@@ -410,6 +487,35 @@ export class AgentBot {
     } catch {
       return null;
     }
+  }
+
+  /** Ask Groq for the deliverable as a set of files (repo-evidence mode). */
+  private async generateDeliverableFiles(specText: string): Promise<DeliverableFile[]> {
+    logger.info("agent_bot_generating_files", { name: this.name, model: this.model, specSnippet: specText.slice(0, 120) });
+    const response = await this.groq.chat.completions.create({
+      model: this.model,
+      max_tokens: 4096,
+      messages: [
+        {
+          role: "system",
+          content:
+            `You are ${this.name}, an autonomous agent working on TaskPay. ` +
+            "Produce the ACTUAL deliverable a contractor would hand in for the task below, as a set of files. " +
+            'Output ONLY a JSON object of the form {"files":[{"path":"relative/path.ext","content":"<complete file content>"}]}. ' +
+            "Include every file the task asks for — source files, tests, and a short README — as SEPARATE entries. " +
+            "Use forward-slash relative paths. No commentary, no markdown fences, no text outside the JSON.",
+        },
+        { role: "user", content: `TASK:\n${specText}` },
+      ],
+    });
+
+    const choice = response.choices[0];
+    if (choice?.finish_reason === "length") {
+      throw new Error("Groq cut the deliverable off at max_tokens — refusing to submit a truncated artifact");
+    }
+    const raw = (choice?.message.content ?? "").trim();
+    if (!raw) throw new Error("Groq returned an empty deliverable");
+    return parseDeliverableFiles(raw);
   }
 
   /** Ask Groq to actually produce the deliverable for the spec. */

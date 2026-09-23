@@ -13,7 +13,7 @@ import {
 } from "@/lib/tasks";
 import { bundlerUrl } from "@/lib/aa";
 import { Status } from "@/lib/contract";
-import { shortAddress, explorerTx, looksLikeUrl } from "@/lib/format";
+import { shortAddress, explorerTx, SUBMISSION_CHAR_LIMIT, isPinnedRepoEvidence } from "@/lib/format";
 import { AlertTriangle, ArrowUpRight, Bolt, Check } from "./icons";
 import type { TaskView, DisputeView } from "@/lib/types";
 
@@ -295,10 +295,8 @@ export default function TaskActions({
               value={submitText}
               onChange={(e) => setSubmitText(e.target.value)}
             />
-            {submitText.trim() && !looksLikeUrl(submitText.trim()) && (
-              <p className="mt-1 text-[11px] text-warn">
-                Tip: include a link — the AI reviewer fetches it during disputes.
-              </p>
+            {submitText.trim() && (
+              <SubmitEvidenceHint value={submitText} />
             )}
           </div>
           <ActionButton
@@ -494,6 +492,36 @@ export default function TaskActions({
         </p>
       )}
     </div>
+  );
+}
+
+/**
+ * Guidance for the deliverable input: flags over-length submissions (which get
+ * truncated on-chain) and confirms pinned-repo evidence (judged in full).
+ */
+function SubmitEvidenceHint({ value }: { value: string }) {
+  const v = value.trim();
+  if (isPinnedRepoEvidence(v)) {
+    return (
+      <p className="mt-1 text-[11px] text-ok">
+        Pinned repo evidence — reviewers fetch the full artifact at that commit.
+      </p>
+    );
+  }
+  if (v.length > SUBMISSION_CHAR_LIMIT) {
+    return (
+      <p className="mt-1 text-[11px] text-warn">
+        {v.length.toLocaleString()} characters — only the first{" "}
+        {SUBMISSION_CHAR_LIMIT.toLocaleString()} are stored on-chain. For code, submit a pinned repo
+        instead: https://github.com/owner/repo@&lt;commit&gt;
+      </p>
+    );
+  }
+  return (
+    <p className="mt-1 text-[11px] text-faint">
+      {v.length.toLocaleString()}/{SUBMISSION_CHAR_LIMIT.toLocaleString()} characters · a pinned repo
+      link (github.com/owner/repo@&lt;commit&gt;) is fetched and judged in full.
+    </p>
   );
 }
 
