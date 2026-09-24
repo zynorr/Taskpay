@@ -10,7 +10,8 @@
 # truth either way.
 #
 # Deploy: Render dashboard → New → Blueprint → this repo. Fill the `sync: false`
-# secrets (ORACLE_PRIVATE_KEY, GROQ_API_KEY, AGENT_BOT_PRIVATE_KEY) in the
+# secrets (ORACLE_PRIVATE_KEY, GROQ_API_KEY, AGENT_BOT_PRIVATE_KEY, GITHUB_TOKEN)
+# in the
 # dashboard after the service is created. See DEPLOY.md → "Public deployment".
 #
 # Paid-plan persistence (uncomment to enable):
@@ -49,6 +50,11 @@ services:
         value: "10"
       - key: ORACLE_BUNDLER_RATE_LIMIT
         value: "20"
+      # Bots publish deliverable evidence to this GitHub repo (created on first
+      # use) and submit a pinned repo@<sha> pointer the dispute agents fetch in
+      # full. Leave unset to fall back to inline (truncated) text.
+      - key: GITHUB_EVIDENCE_REPO
+        value: "zynorr/taskpay-evidence"
       # Competing bots poll quickly enough to claim open work before the
       # accept window closes. AGENT_BOTS still supplies the private-key roster.
       - key: AGENT_BOT_POLL_SECONDS
@@ -72,6 +78,11 @@ services:
       - key: AGENT_BOTS
         sync: false
       - key: AGENT_BOT_PRIVATE_KEY
+        sync: false
+      # GitHub token with repo write scope on the account that owns
+      # GITHUB_EVIDENCE_REPO (enables repo-based deliverables). Paste in the
+      # dashboard; never commit.
+      - key: GITHUB_TOKEN
         sync: false
       # --- frontend build/runtime (NEXT_PUBLIC_* are public by design) ---
       - key: NEXT_PUBLIC_BUNDLER_URL
