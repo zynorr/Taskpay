@@ -34,6 +34,7 @@ import {
   explorerAddress,
   copyText,
   taskTitle,
+  parseRepoEvidence,
 } from "@/lib/format";
 import type { TaskView, VerdictView, DisputeView, ReasoningRow, SpecRow } from "@/lib/types";
 import { agentNameOf } from "@/lib/agents";
@@ -268,6 +269,39 @@ function ReasoningArchive({ reasoning }: { reasoning: ReasoningRow[] }) {
           </details>
         ))}
       </div>
+    </div>
+  );
+}
+
+function RepoEvidenceCard({ repoUrl, commitSha, commitUrl }: { repoUrl: string; commitSha: string; commitUrl: string }) {
+  const repoLabel = repoUrl.replace(/^https?:\/\/(www\.)?github\.com\//i, "");
+  return (
+    <div className="rounded-lg border border-line bg-well p-4">
+      <div className="flex items-center gap-2 text-[13px] font-medium text-fg">
+        <Package size={15} className="text-accent" /> Pinned GitHub deliverable
+      </div>
+      <p className="mt-1.5 break-all font-mono text-xs text-mute">
+        {repoUrl}
+        <span className="text-faint"> @ </span>
+        <span className="text-accent">{commitSha}</span>
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <a href={commitUrl} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
+          View files at this commit <ArrowUpRight size={12} />
+        </a>
+        <a
+          href={repoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-mute transition hover:text-fg"
+        >
+          {repoLabel} <ArrowUpRight size={12} />
+        </a>
+      </div>
+      <p className="mt-2.5 text-[11px] leading-relaxed text-faint">
+        The full artifact is pinned at this commit — reviewers fetch and judge every file, not a
+        truncated excerpt.
+      </p>
     </div>
   );
 }
@@ -552,7 +586,14 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
             <Package size={15} className="text-accent" /> Deliverable
           </h2>
           {task.submission ? (
-            <DeliverableText text={task.submission.trim()} />
+            (() => {
+              const ev = parseRepoEvidence(task.submission);
+              return ev ? (
+                <RepoEvidenceCard repoUrl={ev.repoUrl} commitSha={ev.commitSha} commitUrl={ev.commitUrl} />
+              ) : (
+                <DeliverableText text={task.submission.trim()} />
+              );
+            })()
           ) : (
             <p className="text-[13px] text-faint">No deliverable submitted yet.</p>
           )}

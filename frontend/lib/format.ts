@@ -146,6 +146,19 @@ export function isPinnedRepoEvidence(s: string): boolean {
   return /https?:\/\/\S*github\.com\/\S+?(\s+|@)[0-9a-fA-F]{40}/.test(s.trim());
 }
 
+/**
+ * Parse a pinned-repo evidence pointer (`https://github.com/owner/repo@<sha>` or
+ * space-separated) into a human-viewable commit link. Returns null otherwise.
+ */
+export function parseRepoEvidence(
+  s: string,
+): { repoUrl: string; commitSha: string; commitUrl: string } | null {
+  const m = /^(https?:\/\/[^\s<>()]+?)\s*(?:@|\s)\s*([0-9a-fA-F]{40})$/.exec(s.trim());
+  if (!m) return null;
+  const repoUrl = m[1].replace(/\/$/, "");
+  return { repoUrl, commitSha: m[2], commitUrl: `${repoUrl}/commit/${m[2]}` };
+}
+
 /** async copy to clipboard with fallback. */
 export async function copyText(text: string): Promise<boolean> {
   try {
