@@ -86,8 +86,8 @@ function toDisplayName(value: string): string {
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
-/** A stable evidence branch per TaskPay task and bot worker. */
-export function evidenceBranchForTask(branchPrefix: string, taskId: bigint | number, botName: string): string {
+/** A stable evidence folder per TaskPay task and bot worker (committed to the default branch). */
+export function evidenceFolderForTask(branchPrefix: string, taskId: bigint | number, botName: string): string {
   const prefix = branchPrefix.replace(/[^A-Za-z0-9_/-]+/g, "").replace(/^\/+|\/+$/g, "") || "taskpay";
   const slug =
     botName
@@ -185,15 +185,6 @@ export function validateDeliverableFiles(
 
 
 
-interface EvidenceBranchResolution {
-  branch: string;
-  headSha: string | null;
-  baseBranch: string;
-  createdBranch: boolean;
-  parentSha: string;
-  treeBaseSha: string;
-}
-
 async function ensureEvidenceRepo(octokit: Octokit, repo: GitHubEvidenceRepo): Promise<string> {
   // Read the repo; create it (owner-authenticated) when it does not exist yet.
   try {
@@ -270,33 +261,40 @@ async function readCommitTree(octokit: Octokit, repo: GitHubEvidenceRepo, commit
   }
 }
 
-async function createEvidenceBranch(octokit: Octokit, repo: GitHubEvidenceRepo, branch: string, baseSha: string): Promise<boolean> {
-  try {
-    await octokit.rest.git.createRef({ owner: repo.owner, repo: repo.repo, ref: `refs/heads/${branch}`, sha: baseSha });
-    return true;
-  } catch (err) {
-    if (requestStatus(err) === 422) {
-      logger.warn("evidence_branch_exists", { repo: `${repo.owner}/${repo.repo}`, branch });
-      return false;
+async function commitEvidenceToMain(
+  octokit: Octokit,
+  repo: GitHubEvidenceRepo,
+  mainBranch: string,
+  folder: string,
+  files: Array<{ path: string; content: string; executable: boolean }>,
+  commitMessage: string,
+): Promise<string> {
+  // Commit the deliverable under `folder/` on the default branch. Concurrent
+  // workers may advance the branch between our read and update, so retry the
+  // 422 non-fast-forward against the fresh head.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const head = await readBranchHead(octokit, repo, mainBranch);
+    if (!head) {
+      throw new EvidenceUploadError("failed", `Branch ${mainBranch} has no commits in ${repo.owner}/${repo.repo}`);
     }
-    throw new EvidenceUploadError(
-      "failed",
-      `Could not create evidence branch ${branch} in ${repo.owner}/${repo.repo}: ${errorMessage(err)}`,
-      { cause: err },
+    const treeSha = await createEvidenceTree(
+      octokit,
+      repo,
+      await readCommitTree(octokit, repo, head),
+      files.map((f) => ({ ...f, path: `${folder}/${f.path}` })),
     );
+    const commitSha = await createEvidenceCommit(octokit, repo, commitMessage, treeSha, head);
+    try {
+      await octokit.rest.git.updateRef({ owner: repo.owner, repo: repo.repo, ref: `heads/${mainBranch}`, sha: commitSha });
+      return commitSha;
+    } catch (err) {
+      if (attempt < 4 && requestStatus(err) === 422) continue;
+      throw new EvidenceUploadError("failed", `Could not update ${mainBranch} in ${repo.owner}/${repo.repo}: ${errorMessage(err)}`, {
+        cause: err,
+      });
+    }
   }
-}
-
-async function updateEvidenceBranch(octokit: Octokit, repo: GitHubEvidenceRepo, branch: string, sha: string): Promise<void> {
-  try {
-    await octokit.rest.git.updateRef({ owner: repo.owner, repo: repo.repo, ref: `heads/${branch}`, sha });
-  } catch (err) {
-    throw new EvidenceUploadError(
-      "failed",
-      `Could not update evidence branch ${branch} in ${repo.owner}/${repo.repo}: ${errorMessage(err)}`,
-      { cause: err },
-    );
-  }
+  throw new EvidenceUploadError("failed", `Could not commit evidence to ${mainBranch} in ${repo.owner}/${repo.repo}`);
 }
 
 async function createEvidenceTree(
@@ -369,10 +367,8 @@ export interface EvidenceUploadSummary {
   repo: string;
   taskId: string;
   botName: string;
-  branch: string;
+  folder: string;
   commitSha: string;
-  baseBranch: string;
-  createdBranch: boolean;
   submittedAt: string;
   fileCount: number;
   totalBytes: number;
@@ -380,45 +376,8 @@ export interface EvidenceUploadSummary {
   submission: string;
 }
 
-async function resolveEvidenceBranchState(
-  octokit: Octokit,
-  repo: GitHubEvidenceRepo,
-  branch: string,
-  baseBranch: string,
-): Promise<EvidenceBranchResolution> {
-  const headSha = await readBranchHead(octokit, repo, branch);
-  if (headSha) {
-    return {
-      branch,
-      headSha,
-      baseBranch,
-      createdBranch: false,
-      parentSha: headSha,
-      treeBaseSha: await readCommitTree(octokit, repo, headSha),
-    };
-  }
-
-  const baseSha = await readBranchHead(octokit, repo, baseBranch);
-  if (!baseSha) {
-    throw new EvidenceUploadError("failed", `Base branch ${baseBranch} has no commits in ${repo.owner}/${repo.repo}`);
-  }
-  const createdBranch = await createEvidenceBranch(octokit, repo, branch, baseSha);
-  const freshHead = createdBranch ? baseSha : await readBranchHead(octokit, repo, branch);
-  if (!freshHead) {
-    throw new EvidenceUploadError("failed", `Evidence branch ${branch} missing in ${repo.owner}/${repo.repo}`);
-  }
-  return {
-    branch,
-    headSha,
-    baseBranch,
-    createdBranch,
-    parentSha: freshHead,
-    treeBaseSha: await readCommitTree(octokit, repo, freshHead),
-  };
-}
-
-function toCallableEvidenceBranch(prefix: string | undefined, taskId: bigint | number, botName: string): string {
-  return evidenceBranchForTask(prefix ?? "taskpay", taskId, botName);
+function toCallableEvidenceFolder(prefix: string | undefined, taskId: bigint | number, botName: string): string {
+  return evidenceFolderForTask(prefix ?? "taskpay", taskId, botName);
 }
 
 export function resolveEvidenceUploadConfig(value: string | undefined): GitHubEvidenceRepo | null {
@@ -457,18 +416,16 @@ export async function uploadDeliverableEvidence(args: EvidenceUploadArgs): Promi
   const repo = { owner: args.repo.owner, repo: args.repo.repo };
   const octokit = resolveOctokit();
   const validated = validateDeliverableFiles(args.files, args.fileCountLimit ?? MAX_EVIDENCE_FILES, args.totalBytesLimit ?? MAX_EVIDENCE_BYTES);
-  const baseBranch = args.defaultBranch ?? (await ensureEvidenceRepo(octokit, repo));
-  const branch = toCallableEvidenceBranch(args.branchPrefix, args.taskId, args.botName);
-  const branchState = await resolveEvidenceBranchState(octokit, repo, branch, baseBranch);
+  const mainBranch = args.defaultBranch ?? (await ensureEvidenceRepo(octokit, repo));
+  const folder = toCallableEvidenceFolder(args.branchPrefix, args.taskId, args.botName);
   const commitMessage = (args.commitMessage ?? `TaskPay task ${args.taskId.toString()} deliverable by ${args.botName}`).slice(0, 200);
-  const commitSha = await createEvidenceCommit(octokit, repo, commitMessage, await createEvidenceTree(octokit, repo, branchState.treeBaseSha, validated.files), branchState.parentSha);
-  await updateEvidenceBranch(octokit, repo, branch, commitSha);
+  const commitSha = await commitEvidenceToMain(octokit, repo, mainBranch, folder, validated.files, commitMessage);
   const repoUrl = `https://github.com/${repo.owner}/${repo.repo}`;
   const submission = evidenceSubmissionForCommit(repo, commitSha);
   logger.info("evidence_uploaded", {
     repo: `${repo.owner}/${repo.repo}`,
     taskId: args.taskId.toString(),
-    branch,
+    folder,
     commitSha,
   });
   return {
@@ -476,10 +433,8 @@ export async function uploadDeliverableEvidence(args: EvidenceUploadArgs): Promi
     repo: repo.repo,
     taskId: args.taskId.toString(),
     botName: args.botName,
-    branch,
+    folder,
     commitSha,
-    baseBranch,
-    createdBranch: branchState.createdBranch,
     submittedAt: new Date().toISOString(),
     fileCount: validated.files.length,
     totalBytes: validated.totalBytes,
