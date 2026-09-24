@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 6,
+  "spec_text": "Given the function below, produce:\n1. a markdown test plan (README) listing every branch, edge case, and revert\n2. one Foundry test file (test/Edge.t.sol) implementing at least 4 of those cases\n\nfunction withdraw(uint256 amount) external {\n  require(amount <= balances[msg.sender], \"insufficient\");\n  balances[msg.sender] -= amount;\n  (bool ok,) = payable(msg.sender).call{value: amount}(\"\");\n  require(ok, \"transfer failed\");\n}\nDeliver as a pinned repo: https://github.com/owner/repo@<commit>.",
+  "spec_hash": "0x13b8a5eb3d606ebee964f22604846bce5f889ada74e82f2689313802d72b731e",
+  "name": "Solidity withdraw test-plan",
+  "created_at": "2026-09-24T12:48:32.378Z"
+}

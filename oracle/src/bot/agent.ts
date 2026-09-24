@@ -85,31 +85,6 @@ const DEFAULT_PROFILE_KEYWORDS = [
 
 const MAX_DELIVERABLE_CHARS = 2_000;
 
-// Parse the model's structured deliverable ({"files":[{path,content}]}).
-// Tolerates a ```json fence around the object; rejects anything else so the
-// caller can fall back to the inline-text path.
-function parseDeliverableFiles(raw: string): DeliverableFile[] {
-  let text = raw.trim();
-  const fence = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(text);
-  if (fence?.[1]) text = fence[1].trim();
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start === -1 || end <= start) throw new Error("Deliverable was not a JSON files object");
-  const parsed = JSON.parse(text.slice(start, end + 1)) as { files?: unknown };
-  if (!Array.isArray(parsed.files) || parsed.files.length === 0) {
-    throw new Error("Deliverable JSON had no files array");
-  }
-  const files: DeliverableFile[] = [];
-  for (const entry of parsed.files) {
-    const file = entry as { path?: unknown; content?: unknown };
-    if (typeof file.path !== "string" || !file.path.trim() || typeof file.content !== "string") {
-      throw new Error("Deliverable JSON file entry needs string path + content");
-    }
-    files.push({ path: file.path.trim(), content: file.content });
-  }
-  return files;
-}
-
 // Session-key scope + lifetime for the bot's delegated signer: the bot may only
 // accept/submit on the TaskPay contract, and the key expires after a week (the
 // bot re-authorizes a fresh key on each restart that finds none active).
@@ -118,6 +93,34 @@ const ACCOUNT_SESSION_ABI = [
   "function sessionValidUntil(address key) view returns (uint48)",
   "function authorizeSession(address key, uint48 validUntil, address[] targets, bytes4[] selectors)",
 ];
+
+// Function-call schema for deliverable generation. The verdict agents already
+// use forced tool calls to get structured output reliably; the same approach
+// sidesteps the model's poor JSON-escaping of code in raw json_object mode.
+const FILES_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "submit_deliverable",
+    description: "Submit the deliverable as a set of files.",
+    parameters: {
+      type: "object",
+      properties: {
+        files: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "relative file path" },
+              content: { type: "string", description: "complete file content" },
+            },
+            required: ["path", "content"],
+          },
+        },
+      },
+      required: ["files"],
+    },
+  },
+};
 
 // A hung RPC (the public testnet endpoint can stall for minutes) must not
 // wedge the daemon: if a tick doesn't finish in this long, `busy` is reset
@@ -501,21 +504,36 @@ export class AgentBot {
           content:
             `You are ${this.name}, an autonomous agent working on TaskPay. ` +
             "Produce the ACTUAL deliverable a contractor would hand in for the task below, as a set of files. " +
-            'Output ONLY a JSON object of the form {"files":[{"path":"relative/path.ext","content":"<complete file content>"}]}. ' +
-            "Include every file the task asks for — source files, tests, and a short README — as SEPARATE entries. " +
-            "Use forward-slash relative paths. No commentary, no markdown fences, no text outside the JSON.",
+            "Call submit_deliverable with every file the task asks for — source files, tests, and a short README — " +
+            "as separate entries, each with a relative path and the complete file content.",
         },
         { role: "user", content: `TASK:\n${specText}` },
       ],
+      tools: [FILES_TOOL],
+      tool_choice: { type: "function", function: { name: "submit_deliverable" } },
     });
 
     const choice = response.choices[0];
     if (choice?.finish_reason === "length") {
       throw new Error("Groq cut the deliverable off at max_tokens — refusing to submit a truncated artifact");
     }
-    const raw = (choice?.message.content ?? "").trim();
-    if (!raw) throw new Error("Groq returned an empty deliverable");
-    return parseDeliverableFiles(raw);
+    const toolCall = choice?.message.tool_calls?.find(
+      (tc) => tc.type === "function" && tc.function.name === "submit_deliverable",
+    );
+    if (!toolCall) throw new Error("Groq did not return a submit_deliverable tool call");
+    const parsed = JSON.parse(toolCall.function.arguments) as { files?: unknown };
+    if (!Array.isArray(parsed.files) || parsed.files.length === 0) {
+      throw new Error("Deliverable JSON had no files array");
+    }
+    const files: DeliverableFile[] = [];
+    for (const entry of parsed.files) {
+      const file = entry as { path?: unknown; content?: unknown };
+      if (typeof file.path !== "string" || !file.path.trim() || typeof file.content !== "string") {
+        throw new Error("Deliverable file entry needs string path + content");
+      }
+      files.push({ path: file.path.trim(), content: file.content });
+    }
+    return files;
   }
 
   /** Ask Groq to actually produce the deliverable for the spec. */

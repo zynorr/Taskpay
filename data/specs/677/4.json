@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 4,
+  "spec_text": "Build a CLI (validate.mjs) that takes a path to a JSON config, validates it against\nan embedded schema (host: string, port: int 1-65535, tls: bool), prints a line per\nviolation, and exits 1 if any exist, 0 otherwise. Include three node:test cases.\nDeliver as a pinned repo: https://github.com/owner/repo@<commit>.",
+  "spec_hash": "0x0f37b14db3dac75e8b23369ca85575bd07ad95f36981ba63e544f546aa94bed9",
+  "name": "JSON config validator",
+  "created_at": "2026-09-24T12:41:19.380Z"
+}

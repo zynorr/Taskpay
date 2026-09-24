@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 2,
+  "spec_text": "Build a CLI (normalize.py, Python 3) that reads CSV from stdin, lowercases a\n\"status\" column, trims whitespace on all columns, drops rows where \"id\" is empty,\nand writes CSV to stdout. Reject (exit 2) if required columns (id, status) are\nmissing. Include a pytest file with at least 3 cases. Deliver as a pinned repo:\nhttps://github.com/owner/repo@<commit>.",
+  "spec_hash": "0x922bd90740e5bdc4cbacd4964cdd032372182b8f6c8a426e05a8cf63d932da0b",
+  "name": "CSV schema normalizer",
+  "created_at": "2026-09-24T12:41:09.973Z"
+}

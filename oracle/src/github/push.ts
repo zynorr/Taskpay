@@ -194,12 +194,49 @@ interface EvidenceBranchResolution {
   treeBaseSha: string;
 }
 
-async function resolveRepoBaseBranch(octokit: Octokit, repo: GitHubEvidenceRepo): Promise<string> {
+async function ensureEvidenceRepo(octokit: Octokit, repo: GitHubEvidenceRepo): Promise<string> {
+  // Read the repo; create it (owner-authenticated) when it does not exist yet.
   try {
     const repository = await octokit.rest.repos.get({ owner: repo.owner, repo: repo.repo });
     return repository.data.default_branch || "main";
   } catch (err) {
-    throw new EvidenceUploadError("failed", `Could not inspect GitHub repo ${repo.owner}/${repo.repo}: ${errorMessage(err)}`, {
+    if (requestStatus(err) !== 404) {
+      throw new EvidenceUploadError("failed", `Could not inspect GitHub repo ${repo.owner}/${repo.repo}: ${errorMessage(err)}`, {
+        cause: err,
+      });
+    }
+  }
+
+  const login = await octokit.rest.users.getAuthenticated().catch(() => null);
+  const authenticated = (login?.data.login ?? "").toLowerCase();
+  if (authenticated && authenticated !== repo.owner.toLowerCase()) {
+    throw new EvidenceUploadError(
+      "rejected",
+      `Evidence repo ${repo.owner}/${repo.repo} must be owned by the authenticated GitHub account (${authenticated || "unknown"})`,
+    );
+  }
+
+  try {
+    const created = await octokit.rest.repos.createForAuthenticatedUser({
+      name: repo.repo,
+      description: "TaskPay agent deliverable evidence",
+      private: false,
+      auto_init: true,
+    });
+    return created.data.default_branch || "main";
+  } catch (err) {
+    // 422: another worker already created it in the same moment — read it back.
+    if (requestStatus(err) === 422) {
+      try {
+        const existing = await octokit.rest.repos.get({ owner: repo.owner, repo: repo.repo });
+        return existing.data.default_branch || "main";
+      } catch {
+        throw new EvidenceUploadError("failed", `Could not create GitHub repo ${repo.owner}/${repo.repo}: ${errorMessage(err)}`, {
+          cause: err,
+        });
+      }
+    }
+    throw new EvidenceUploadError("failed", `Could not create GitHub repo ${repo.owner}/${repo.repo}: ${errorMessage(err)}`, {
       cause: err,
     });
   }
@@ -420,7 +457,7 @@ export async function uploadDeliverableEvidence(args: EvidenceUploadArgs): Promi
   const repo = { owner: args.repo.owner, repo: args.repo.repo };
   const octokit = resolveOctokit();
   const validated = validateDeliverableFiles(args.files, args.fileCountLimit ?? MAX_EVIDENCE_FILES, args.totalBytesLimit ?? MAX_EVIDENCE_BYTES);
-  const baseBranch = args.defaultBranch ?? (await resolveRepoBaseBranch(octokit, repo));
+  const baseBranch = args.defaultBranch ?? (await ensureEvidenceRepo(octokit, repo));
   const branch = toCallableEvidenceBranch(args.branchPrefix, args.taskId, args.botName);
   const branchState = await resolveEvidenceBranchState(octokit, repo, branch, baseBranch);
   const commitMessage = (args.commitMessage ?? `TaskPay task ${args.taskId.toString()} deliverable by ${args.botName}`).slice(0, 200);

@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 8,
+  "spec_text": "Build a Python script (fib.py) that reads an integer N from command-line arguments\nand prints the first N Fibonacci numbers (0,1,1,2,...), one per line. Include a\npytest file (test_fib.py) asserting fib(10) == [0,1,1,2,3,5,8,13,21,34].\nDeliver as a pinned repo: https://github.com/owner/repo@<commit>.",
+  "spec_hash": "0x334638399079300941cd2c0df2721294653758808bc70ae269eb0b5468f4cc8b",
+  "name": "Fibonacci CLI in Python",
+  "created_at": "2026-09-24T13:00:11.909Z"
+}

@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 3,
+  "spec_text": "Write a markdown copy deck for \"TaskPay — escrowed settlement for agent work.\"\nInclude: a 6-word headline, a 2-line subhead, three feature bullets, and a 3-line\n\"how it works\" explainer covering escrow, dispute, and 0 gas. Deliver as markdown\n(inline is fine, or a pinned repo).",
+  "spec_hash": "0x6b2598e1e3b3cd74dc1bc7c0f0486fe6700ba5d06f00aab494fd38c146b2b44e",
+  "name": "TaskPay landing copy deck",
+  "created_at": "2026-09-24T12:41:14.566Z"
+}

@@ -1,0 +1,8 @@
+{
+  "chain_id": 677,
+  "task_id": 0,
+  "spec_text": "Build a Node.js CLI (scripts/healthcheck.mjs) that:\n- reads an RPC URL + timeout from env (RPC_URL, TIMEOUT_MS, default 5000)\n- calls eth_chainId and eth_blockNumber, measures round-trip latency in ms\n- exits 0 on success, exits 1 on any failure (timeout, bad response, no URL)\n- prints one JSON line per run: {\"chainId\":...,\"block\":...,\"latencyMs\":...}\nInclude a unit test (node:test) that mocks the RPC and asserts success + failure paths.\nDeliver as a pinned repo: https://github.com/owner/repo@<commit>.",
+  "spec_hash": "0x4e4c3a1c5305a9d2714106c7477eb7638bf7cc933ee356b1c071856704189002",
+  "name": "RPC health-check cron",
+  "created_at": "2026-09-24T12:41:01.097Z"
+}
